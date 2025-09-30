@@ -16,7 +16,7 @@
   html,body{margin:0; padding:0; background:#fff; color:var(--text);
     font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
   /* Center content and add side whitespace */
-  .wrap{max-width:1200px; margin:0 auto; padding:0 20px; box-sizing:border-box;}
+  .wrap{max-width:1200px; margin:0 auto; padding:0 1.5in; box-sizing:border-box;}
 
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
   .brand{display:flex;align-items:center;gap:12px}
@@ -198,7 +198,7 @@
     <div class="right-head">
       <span class="creator">Created by Fabian Brandimarte</span>
       <button id="helpBtn" class="help-btn" title="User manual">Help</button>
-      <img class="logo" alt="Shell" src=https://1000logos.net/wp-content/uploads/2017/06/Shell-Logo.png>
+      <img class="logo" alt="Shell" src="https://1000logos.net/wp-content/uploads/2017/06/Shell-Logo.png" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
     </div>
   </header>
 
@@ -434,7 +434,7 @@
   </div>
 </div>
 
-<script src=https://cdn.plot.ly/plotly-2.32.0.min.js></script>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 <script>
 /* ===== GLOBALS ===== */
 let previewTimer = null;
@@ -1389,26 +1389,6 @@ mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
     }
   });
 
-  (function(){const el=document.getElementById('baselineSelect'); if(!el) return; el.addEventListener('change', (e)=>{
-    BaselineId = e.target.value;
-  });
-
-  (function(){const el=document.getElementById('btnAddScenario'); if(!el) return; el.addEventListener('click', ()=>{
-    const nm = (document.getElementById('scnName').value || '').trim();
-    const scn = readCurrentScenario(nm);
-    Scenarios.push(scn);
-    if(!BaselineId) BaselineId = scn.id;
-    renderScenarioList();
-    document.getElementById('scnName').value='';
-  });
-
-  (function(){const el=document.getElementById('btnExportScenarios'); if(!el) return; el.addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify(Scenarios, null, 2)], {type:'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'scenarios.json'; a.click();
-    URL.revokeObjectURL(url);
-  });
 
   function seededFrom(seedStr){
     return seeded(seedStr || 'scn_shared_seed'); // reuse app RNG
@@ -1459,7 +1439,7 @@ mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
       NTG[i] = sampleOne(S.inputs['Net to Gross'], rnd, 'Net to Gross', S.fluid);
       PHI[i] = sampleOne(S.inputs['Porosity'], rnd, 'Porosity', S.fluid);
       SW[i]  = sampleOne(S.inputs['Water Saturation'], rnd, 'Water Saturation', S.fluid);
-      const fvfName = (S.fluid==='gas') ? 'Bg' : 'Bo';
+      const fvfName = S.fluid==='gas' ? 'Bg' : 'Bo';
       FVF[i] = sampleOne(S.inputs[fvfName], rnd, fvfName, S.fluid);
       RF[i]  = Math.max(0, Math.min(1, sampleOne(S.rf, rnd, 'Recovery Factor', S.fluid)));
     }
@@ -1506,10 +1486,10 @@ mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
     }, {displayModeBar:true,responsive:true});
 
     const rows = results.map(r=>{
-      const fmt = (x)=> (Number.isFinite(x)? ((Math.abs(x)>=100)? x.toFixed(0): x.toFixed(2)) : '—');
+      const fmt = (x)=> Number.isFinite(x)? ((Math.abs(x)>=100)? x.toFixed(0): x.toFixed(2)) : '—';
       const S = r.stats, B = base.stats;
-      const dP50 = (S.p50 - B.p50);
-      const dP50p = (Number.isFinite(B.p50) && B.p50!==0) ? (dP50/B.p50*100) : NaN;
+      const dP50 = S.p50 - B.p50;
+      const dP50p = Number.isFinite(B.p50) && B.p50!==0 ? dP50/B.p50*100 : NaN;
       return `
         <tr>
           <td>${r.name}${r.id===base.id?' ⭐':''}</td>
@@ -1532,26 +1512,38 @@ mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
   }
 
   // wire baseline change early
-  (function(){const el=document.getElementById('baselineSelect'); if(!el) return; el.addEventListener('change', (e)=>{ BaselineId = e.target.value; });
+  (function(){
+    const el = document.getElementById('baselineSelect');
+    if(!el) return;
+    el.addEventListener('change', (e)=>{ BaselineId = e.target.value; });
+  })();
 
   // add scenario
-  (function(){const el=document.getElementById('btnAddScenario'); if(!el) return; el.addEventListener('click', ()=>{
-    const nm = (document.getElementById('scnName').value || '').trim();
-    const scn = readCurrentScenario(nm);
-    Scenarios.push(scn);
-    if(!BaselineId) BaselineId = scn.id;
-    document.getElementById('scnName').value='';
-    renderScenarioList();
-  });
+  (function(){
+    const el = document.getElementById('btnAddScenario');
+    if(!el) return;
+    el.addEventListener('click', ()=>{
+      const nm = (document.getElementById('scnName').value || '').trim();
+      const scn = readCurrentScenario(nm);
+      Scenarios.push(scn);
+      if(!BaselineId) BaselineId = scn.id;
+      document.getElementById('scnName').value='';
+      renderScenarioList();
+    });
+  })();
 
   // export
-  (function(){const el=document.getElementById('btnExportScenarios'); if(!el) return; el.addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify(Scenarios, null, 2)], {type:'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'scenarios.json'; a.click();
-    URL.revokeObjectURL(url);
-  });
+  (function(){
+    const el = document.getElementById('btnExportScenarios');
+    if(!el) return;
+    el.addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(Scenarios, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'scenarios.json'; a.click();
+      URL.revokeObjectURL(url);
+    });
+  })();
 })();
 </script>
 
