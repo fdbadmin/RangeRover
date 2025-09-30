@@ -15,6 +15,8 @@
   }
   html,body{margin:0; padding:0; background:#fff; color:var(--text);
     font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  /* Center content and add side whitespace */
+  .wrap{max-width:1200px; margin:0 auto; padding:0 20px; box-sizing:border-box;}
 
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
   .brand{display:flex;align-items:center;gap:12px}
@@ -85,9 +87,9 @@
 
   .plots-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
   .plot{
-    width:100%; aspect-ratio: 12 / 10; min-height:520px;
+    width:100%; aspect-ratio: 16 / 10; min-height:440px;
     border:1px solid var(--border); border-radius:12px;
-    padding:22px; box-sizing:border-box; background:#fff; overflow:hidden;
+    padding:20px; box-sizing:border-box; background:#fff; overflow:hidden;
   }
   .plot-full{grid-column:1 / -1}
   .plot-tornado{
