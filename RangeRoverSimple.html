@@ -1,0 +1,1558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>RangeRover — Probabilistic Volume Screener (Shell)</title>
+<style>
+  :root{
+    --shell-red:#ED1C24; --shell-yellow:#FFD500; --text:#111827; --muted:#6B7280;
+    --panel:#FFFFFF; --border:#E5E7EB;
+    --blue:#2A66D0; --blue-light:#C9D9FF; --blue-stroke:#8FB0FF;
+    --down:#F87171; /* red */ --up:#34D399;   /* green */
+    --mid:#7C3AED;  /* deterministic */
+    --shadow: 0 10px 24px rgba(0,0,0,0.08);
+  }
+  html,body{margin:0; padding:0; background:#fff; color:var(--text);
+    font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .brand{display:flex;align-items:center;gap:12px}
+  h1{font-size:26px;margin:0}
+  .subtitle{font-weight:700;color:#111;margin-top:2px}
+  .pill{display:inline-block;background:var(--shell-yellow);border-radius:999px;padding:4px 8px;color:#111;font-size:12px;font-weight:700}
+
+  .logo{height:32px;object-fit:contain}
+  .help-btn{appearance:none;border:1px solid var(--border);border-radius:999px;padding:8px 12px;background:#fff;cursor:pointer;font-size:14px}
+  .help-btn:hover{border-color:#d1d5db;background:#fafafa}
+  .creator{color:var(--muted); font-size:14px; white-space:nowrap}
+
+  .sub{color:var(--muted);margin:6px 0 18px}
+
+  /* Left fixed; right flexible */
+  .grid{display:grid; grid-template-columns:820px calc(100% - 820px - 28px); gap:28px;}
+  @media (max-width:1280px){ .grid{grid-template-columns:1fr} }
+
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; box-sizing:border-box;}
+  .section-title{display:flex;align-items:center;gap:8px;margin:0 0 12px 0}
+  .chip{background:#fff;border:1px solid var(--border);padding:2px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
+  hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
+
+  .form-grid{display:grid;grid-template-columns:200px 1fr;gap:10px 16px;align-items:center}
+  .form-grid .note{grid-column:2/3;color:var(--muted);font-size:12px;margin-top:-6px}
+  label{font-weight:600}
+  select,input[type="number"],input[type="text"]{
+    width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+    background:#fff;color:#111;font-size:14.5px;box-sizing:border-box
+  }
+
+  /* Small dynamic labels over every control (incl. dropdown) */
+  .field{display:flex;flex-direction:column;align-items:stretch}
+  .slabel{font-size:11px;color:var(--muted);margin:0 0 4px 2px;line-height:1}
+  .slabel.disabled{color:#9CA3AF;text-decoration:line-through}
+
+  /* Rows: Label | Distribution field | V0 field | V1 field | V2 field */
+  .dist-row{
+    display:grid;grid-template-columns:200px 180px 1fr 1fr 1fr;
+    gap:12px;align-items:start;margin-bottom:10px
+  }
+  .weights-row{
+    display:grid; grid-template-columns:200px 180px 1fr 1fr 1fr;
+    gap:12px; align-items:center; margin:-6px 0 10px 0;
+  }
+  .weights-row.hidden{display:none}
+  .weights-row label{font-weight:500; color:var(--muted)}
+
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  button{appearance:none;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:#fff;color:#111;cursor:pointer;font-size:14px}
+  button.primary{background:var(--shell-red);color:#fff;border-color:var(--shell-red);font-weight:700}
+  button.good{background:var(--shell-yellow);color:#111;border-color:var(--shell-yellow);font-weight:700}
+  .err{color:#B91C1C;margin-top:6px;font-weight:700}
+
+  .previews{margin-top:14px}
+  .previews h4{margin:10px 0 8px 0}
+  .preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .mini{
+    width:100%; min-height:240px; border:1px solid var(--border); border-radius:12px;
+    padding:18px 18px 42px 18px; box-sizing:border-box; background:#fff; overflow:hidden;
+  }
+
+  .summary-wrap{max-width:840px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
+  th{font-weight:700}
+  .muted{color:var(--muted)}
+
+  .plots-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+  .plot{
+    width:100%; aspect-ratio: 12 / 10; min-height:520px;
+    border:1px solid var(--border); border-radius:12px;
+    padding:22px; box-sizing:border-box; background:#fff; overflow:hidden;
+  }
+  .plot-full{grid-column:1 / -1}
+  .plot-tornado{
+    min-height: 420px; aspect-ratio: 16 / 7;
+    max-width:65%; margin-left:0; margin-right:auto; /* narrower & left-aligned */
+  }
+  .chart-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin:6px 0 0}
+
+  /* Help modal */
+  .modal{position:fixed;inset:0;display:none;background:rgba(0,0,0,0.4);z-index:9999;align-items:flex-start;justify-content:center;padding:40px 24px}
+  .modal.open{display:flex}
+  .modal-content{
+    background:#fff;border-radius:14px;border:1px solid var(--border);max-width:1100px;width:100%;
+    max-height:85vh; overflow:auto; box-shadow:var(--shadow); padding:24px 28px 30px;
+  }
+  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .modal h2{margin:0 0 4px 0}
+  .modal .close{appearance:none;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 10px;cursor:pointer}
+  .toc{display:grid;grid-template-columns:1fr 1fr; gap:8px; margin:12px 0 16px}
+  .toc a{color:var(--shell-red);text-decoration:none;font-weight:600}
+  .toc a:hover{text-decoration:underline}
+  .manual h3{margin-top:18px}
+  .manual code{background:#FFF6E5;padding:2px 4px;border-radius:4px}
+  .hl{color:var(--shell-red); font-weight:700}
+  .callout{background:#FFF8CC;border:1px solid #FDE68A;padding:10px;border-radius:10px}
+  .manual-footer{margin-top:18px; padding-top:10px; border-top:1px solid var(--border); color:var(--muted)}
+
+  /* Scenario Builder (minimal additions) */
+  #scnList .scn-card{border:1px solid var(--border);border-radius:12px;padding:10px;margin:8px 0;background:#fff;box-shadow:none}
+  #scnList .head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  #scnList .meta{display:flex;align-items:center;gap:8px}
+  #scnList .tag{background:#fff;border:1px solid var(--border);padding:2px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
+  #scnList .pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:0 8px;font-size:11px;margin-left:6px;color:var(--muted)}
+  #scnList .actions button{margin-left:6px}
+
+
+  /* --- UI Refresh: Minimal Combo --- */
+  /* Tinted inputs for better contrast */
+  select,
+  input[type="number"],
+  input[type="text"]{
+    background:#f9fafb;
+    border:1px solid #d1d5db;
+  }
+  select:focus,
+  input[type="number"]:focus,
+  input[type="text"]:focus{
+    background:#fff;
+    border-color: var(--blue);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(42, 102, 208, 0.08);
+  }
+
+  /* Slim separators between parameter rows */
+  #params .dist-row{
+    border-bottom:1px solid #f0f0f0;
+    padding:6px 0;
+  }
+  #params .dist-row:last-child{
+    border-bottom:none;
+  }
+  /* Keep weights rows visually tied to their dist-row */
+  #params .weights-row{
+    padding:4px 0 8px 0;
+    margin-top:-6px;
+  }
+
+  /* Subsection header */
+  .subsection{
+    font-size:13px;
+    font-weight:600;
+    color:var(--muted);
+    margin:12px 0 4px;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+
+  /* Slightly soften card appearance */
+  .card{
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+
+  /* When a parameter uses Discrete, shift the separator to below the weights row */
+  #params .dist-row.with-weights{
+    border-bottom:none;
+  }
+  #params .weights-row.show-sep{
+    border-bottom:1px solid #f0f0f0;
+  }
+
+  /* Hide fields that are marked to ignore */
+  .field.hidden-field{ display:none; }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div>
+        <h1>RangeRover <span class="pill">Shell</span></h1>
+        <div class="subtitle">Probabilistic Volume Screener</div>
+      </div>
+    </div>
+    <div class="right-head">
+      <span class="creator">Created by Fabian Brandimarte</span>
+      <button id="helpBtn" class="help-btn" title="User manual">Help</button>
+      <img class="logo" alt="Shell" src=https://1000logos.net/wp-content/uploads/2017/06/Shell-Logo.png>
+    </div>
+  </header>
+
+  <div class="sub">Monte Carlo volumetrics with Recovery Factor. Supported distributions: Discrete (with weights, 1–3 values), Triangular, PERT, Uniform, <b>Normal (default)</b>, Known (P90/P50/P10). Proper truncation keeps draws physical. Gas Bg is in scf/SCF; Oil Bo is in RB/STB.</div>
+
+  <div class="grid">
+    <!-- Inputs -->
+    <div class="card">
+      <h3 class="section-title">Inputs <span class="chip">Units + distributions</span></h3>
+
+      <div class="form-grid">
+        <label for="fluid">Fluid</label>
+        <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option></select>
+
+        <label for="iterations">Iterations</label>
+        <input id="iterations" type="number" min="100" step="100" value="10000" />
+        <div class="note">More = smoother curves</div>
+
+        <label for="seed">Seed (optional)</label>
+        <input id="seed" type="text" placeholder="e.g. 42" />
+        <div class="note">Set for reproducibility</div>
+
+        <label for="nbins">Histogram bins</label>
+        <input id="nbins" type="number" min="20" step="10" value="100" />
+        <div class="note">Granularity of histograms</div>
+
+        <label for="areaUnit">Area units</label>
+        <select id="areaUnit"><option value="acres">acres</option><option value="m2">m²</option><option value="km2">km²</option><option value="ft2">ft²</option></select>
+        <div class="note">Converted internally to acres</div>
+
+        <label for="thicknessUnit">Thickness units</label>
+        <select id="thicknessUnit"><option value="ft">ft</option><option value="m">m</option></select>
+        <div class="note">Converted internally to feet</div>
+      </div>
+
+      <hr class="sep"/>
+      <h4 class="subsection">Rock &amp; fluid properties</h4>
+      <div id="params"></div>
+
+      <div style="margin-top:6px">
+        <h4 class="section-title">Recovery Factor <span class="chip">fraction</span></h4>
+        <div class="dist-row" id="rf-row">
+          <label>Distribution</label>
+          <div class="field">
+            <div class="slabel">Distribution</div>
+            <select class="rf-type">
+              <option>Discrete</option><option>Triangular</option><option>Uniform</option>
+              <option>PERT</option>
+              <option selected>Normal</option><option>Known Distribution</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="slabel rf-l0">Mean / P90</div>
+            <input class="rf-v rf-v0" type="number" step="any"/>
+          </div>
+          <div class="field">
+            <div class="slabel rf-l1">Std Dev / P50</div>
+            <input class="rf-v rf-v1" type="number" step="any"/>
+          </div>
+          <div class="field">
+            <div class="slabel rf-l2">(ignore) / P10</div>
+            <input class="rf-v rf-v2" type="number" step="any"/>
+          </div>
+        </div>
+        <div class="weights-row hidden" id="rf-weights">
+          <label>Weights (%)</label>
+          <div></div>
+          <input class="rf-w w0" type="number" step="any" placeholder="e.g. 33" />
+          <input class="rf-w w1" type="number" step="any" placeholder="e.g. 33" />
+          <input class="rf-w w2" type="number" step="any" placeholder="e.g. 34" />
+        </div>
+      </div>
+
+      <div class="btns">
+        <button class="primary" id="run">Run Simulation</button>
+        <button id="reset">Reset</button>
+        <button class="good" id="downloadCsv" disabled>Download summary CSV</button>
+        <button class="good" id="downloadSamples" disabled>Download samples CSV</button>
+      </div>
+      <div id="error" class="err" role="alert"></div>
+
+      <div class="footer" id="formula-note">
+        Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).
+      </div>
+
+      <div class="previews">
+        <h4 class="section-title">Distribution previews <span class="chip">live</span></h4>
+        <div id="previewGrid" class="preview-grid"></div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="card">
+      <h3 class="section-title" id="results-title">Results (MMBO) <span class="chip">P90 / P50 / P10</span></h3>
+
+      <div class="summary-wrap">
+        <table id="summary">
+          <thead><tr><th>Metric</th><th>P90</th><th>P50</th><th>P10</th><th>Deterministic Mid Case</th></tr></thead>
+          <tbody>
+            <tr><td id="metric-name">STOIIP</td><td class="s-p90 muted">—</td><td class="s-p50 muted">—</td><td class="s-p10 muted">—</td><td class="s-mid muted">—</td></tr>
+            <tr><td id="metric-name-rec">Recoverable STOIIP</td><td class="r-p90 muted">—</td><td class="r-p50 muted">—</td><td class="r-p10 muted">—</td><td class="r-mid muted">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="plots-grid">
+        <div id="cdf-main"  class="plot card"></div>
+        <div id="hist-main" class="plot card"></div>
+        <div id="cdf-rec"   class="plot card"></div>
+        <div id="hist-rec"  class="plot card"></div>
+        <div id="tornado"   class="plot plot-full plot-tornado card"></div>
+      </div>
+
+      <div class="chart-actions">
+        <button data-reset="cdf-main">Reset CDF</button>
+        <button data-reset="hist-main">Reset Hist</button>
+        <button data-reset="cdf-rec">Reset Rec CDF</button>
+        <button data-reset="hist-rec">Reset Rec Hist</button>
+        <button data-reset="tornado">Reset Tornado</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  <!-- Scenario Builder (preserves layout) -->
+
+<!-- Help / User Manual Modal -->
+<div id="helpModal" class="modal" aria-hidden="true" role="dialog" aria-label="User Manual">
+  <div class="modal-content">
+    <div class="modal-head">
+      <h2>RangeRover — User Manual</h2>
+      <button class="close" id="helpClose" aria-label="Close">Close</button>
+    </div>
+    <div class="toc">
+      <a href="#intro">1. Introduction</a><a href="#quickstart">2. Quick start</a>
+      <a href="#inputs">3. Inputs & units</a><a href="#dists">4. Distributions</a>
+      <a href="#trunc">5. Physical truncation</a><a href="#engine">6. Monte Carlo engine</a>
+      <a href="#outputs">7. Outputs</a><a href="#tornado-help">8. Tornado sensitivity</a>
+      <a href="#csv">9. CSV export</a><a href="#tips">10. Tips</a>
+      <a href="#trouble">11. Troubleshooting</a><a href="#gloss">12. Glossary</a>
+    </div>
+    <div class="manual">
+      <h3 id="intro">1) Introduction</h3>
+      <p><span class="hl">RangeRover</span> is a Shell‑styled probabilistic volumetric screener for <b>STOIIP</b> (oil) and <b>GIIP</b> (gas). It runs Monte Carlo simulations using user‑defined distributions (Normal, Triangular, PERT, Uniform, Known, Discrete) for the key volumetric inputs and an optional Recovery Factor, producing CDFs, histograms, a tornado sensitivity chart, and CSV exports. Oil uses Bo (RB/STB); Gas uses Bg (scf/SCF). Recovery Factor multiplies volumes directly.</p>
+
+      <h3 id="quickstart">2) Quick start</h3>
+      <ol>
+        <li>Select <b>Fluid</b>: Oil or Gas (units & formula update automatically).</li>
+        <li>Choose units for <b>Area</b> and <b>Thickness</b>.</li>
+        <li>For each parameter (Area, Thickness, NTG, Porosity, Water Saturation, Bo/Bg), choose a <b>Distribution</b> (Normal, Triangular, PERT, Uniform, Known, Discrete) and provide its parameters. Small labels above each box guide what to enter (e.g., Mean/Std Dev or Min/Mode/Max).</li>
+        <li>Set the <b>Recovery Factor</b> distribution if needed.</li>
+        <li>Press <b>Run Simulation</b>. Use the Reset buttons to re-zoom plots.</li>
+      </ol>
+
+      <h3 id="inputs">3) Inputs & units</h3>
+      <ul>
+        <li><b>Area</b>: m², km², acres, ft² (internally converted to acres).</li>
+        <li><b>Thickness</b>: m or ft (internally converted to ft).</li>
+        <li><b>NTG</b>, <b>Porosity</b>, <b>Water Saturation</b> are treated as <b>fractions</b> (0–1). Previews display in % for readability.</li>
+        <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas.</li>
+      </ul>
+
+      <h3 id="dists">4) Distributions</h3>
+      <p><b>Supported distributions:</b> <b>Normal</b> (mean, std dev), <b>Triangular</b> (min, mode, max), <b>PERT</b> (min, mode, max), <b>Uniform</b> (min, max), <b>Known</b> (P90, P50, P10), and <b>Discrete</b> (1–3 values with optional weights).</p>
+      <div class="callout">
+        <b>Discrete flexibility:</b> you may enter <b>one</b>, <b>two</b>, or <b>three</b> values. Weights are optional. If left blank, weights auto balance (two values → 50/50; three values → ~33/33/33). Any provided weights are normalized automatically.
+      </div>
+      <div class="callout"><b>PERT:</b> Smooth alternative to Triangular using a Beta‑PERT (λ = 4). Inputs: Min, Mode, Max. Mode is used for deterministic and tornado base cases; Min/Max are used for tornado low/high. For Discrete, the deterministic mid‑case uses the highest‑weighted value (if weights are blank, values are treated as equal). The implied mean is (a + λ·m + b)/(λ+2). Sampling is truncated to physical bounds for each parameter.</div>
+
+      <h3 id="trunc">5) Physical truncation</h3>
+      <p>All random draws are constrained to physically sensible ranges:</p>
+      <ul>
+        <li>Fractions (NTG, φ, Sw, RF): 0 to 1.</li>
+        <li>Bo ≥ 1; Bg > 0; Area/Thickness > 0.</li>
+      </ul>
+      <p>Normal draws use <b>truncated sampling</b> (accept–reject) to avoid piling mass at the bounds.</p>
+
+      <h3 id="engine">6) Monte Carlo engine</h3>
+      <p>RangeRover samples each input according to its distribution and computes in-place volumes:</p>
+      <ul>
+        <li><b>Oil (STOIIP):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (Bo in RB/STB) → plots in MMBO</li>
+        <li><b>Gas (GIIP):</b> <code>43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (Bg in scf/SCF) → plots in BCF</li>
+      </ul>
+      <p>Recoverable volume = In-place × RF. P10/P50/P90 are computed from the empirical CDF of simulated samples. Deterministic mid-case uses the most likely input values (Normal→mean; Triangular/PERT→mode; Uniform→midpoint; Known→P50; Discrete→highest‑weighted value — equal weights if blank).</p>
+
+      <h3 id="outputs">7) Outputs</h3>
+      <ul>
+        <li><b>In‑place & Recoverable CDFs</b> with red markers at P90/P50/P10 and a purple diamond for the deterministic mid‑case.</li>
+        <li><b>Histograms</b> with vertical markers for P90/P50/P10 and deterministic mid‑case.</li>
+        <li><b>Tornado sensitivity</b> shows impact of low/high changes in each input vs deterministic mid‑case. Green = upside, Red = downside.</li>
+        <li><b>Summary table</b> shows P90/P50/P10 and Deterministic Mid Case (with P‑value, e.g., P45).</li>
+        <li><b>CSV exports</b>: Summary CSV includes P90/P50/P10 and deterministic values. Samples CSV includes every iteration with all inputs (Area, Thickness, NtG, Porosity, Sw, Bo/Bg, RF) plus in‑place and recoverable volumes, with units.</li>
+      </ul>
+
+      <h3 id="tornado-help">8) Tornado sensitivity</h3>
+      <p>Computed by changing one parameter at a time from its “low” to “high” while others are fixed at base (deterministic mid‑case; weight‑aware for Discrete). Low/High are taken from distribution definitions: Normal = mean±1.28σ; Triangular/PERT/Uniform = Min/Max; Known = P90/P10; Discrete = min/max of values. Bars are:</p>
+      <ul>
+        <li><span style="color:var(--up)">Green</span> for positive Δ (upside),</li>
+        <li><span style="color:var(--down)">Red</span> for negative Δ (downside).</li>
+      </ul>
+      <p>Sorted from biggest impact (top) to smallest (bottom). Left aligned, narrower for readability.</p>
+
+      <h3 id="csv">9) CSV export</h3>
+      <p>Use the buttons to export a <b>summary CSV</b> and a <b>samples CSV</b> (in-place & recoverable per iteration).</p>
+
+      <h3 id="tips">10) Tips</h3>
+      <ul>
+        <li>Set a <b>seed</b> for reproducible results.</li>
+        <li>Increase <b>iterations</b> for smoother CDFs.</li>
+        <li>Use <b>PERT</b> instead of Triangular for a smoother shape when you know min/mode/max.</li>
+        <li>Use <b>Normal (default)</b> unless you have clear min/mode/max or P90/P50/P10 knowledge.</li>
+      </ul>
+
+      <h3 id="trouble">11) Troubleshooting</h3>
+      <ul>
+        <li>Input error messages point to the first offending field (e.g., Triangular min ≤ mode ≤ max).</li>
+        <li>If a plot appears blank, check for missing numbers in required fields.</li>
+      </ul>
+
+      <h3 id="gloss">12) Glossary</h3>
+      <ul>
+        <li><b>P10/P50/P90</b>: high/median/low outcomes (90/50/10% probability of being exceeded).</li>
+        <li><b>NTG</b>: Net to Gross. <b>φ</b>: Porosity. <b>Sw</b>: Water saturation.</li>
+        <li><b>PERT</b>: Beta‑PERT distribution (λ=4) defined by Min, Mode, Max; smoother alternative to Triangular.</li>
+        <li><b>Bg</b>: Gas formation volume factor in scf/SCF (reservoir cubic feet per standard cubic foot).</li>
+      </ul>
+
+      <div class="manual-footer">
+        For assistance or feedback, please contact <b>Fabian.Brandimarte@shell.com</b>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src=https://cdn.plot.ly/plotly-2.32.0.min.js></script>
+<script>
+/* ===== GLOBALS ===== */
+let previewTimer = null;
+let lastSim = null;
+let syncing = false;
+
+/* ===== Units ===== */
+const AREA_FACTORS = { m2: 0.000247105, km2: 247.105, acres: 1.0, ft2: 2.2957e-5 };
+const THICK_FACTORS = { m: 3.28084, ft: 1.0 };
+
+/* ===== Fluid configs ===== */
+function paramsFor(fluid){
+  return fluid==='gas'
+   ? [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true}]
+   : [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true}];
+}
+function labelsFor(fluid){
+  return fluid==='gas'
+    ? { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
+        cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
+        formula:'Formula (Gas): <code>GIIP = 43560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
+      }
+    : { primary:"STOIIP", unit:"MMBO", xMain:"STOIIP (MMBO)", xRec:"Recoverable (MMBO)",
+        cdfTitle:"STOIIP CDF", histTitle:"STOIIP Histogram", metricRec:"Recoverable STOIIP",
+        formula:'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
+      };
+}
+
+/* ===== RNG & distributions ===== */
+const Z90 = 1.2815515655446004;
+function normalFromP90P50P10(p90,p50,p10){return {mean:p50, sigma:(p10-p90)/(2*Z90)};}
+function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function seeded(s){ if(!s) return Math.random; let h=2166136261>>>0; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return mulberry32(h>>>0); }
+function sampleTriangular(r,min,mode,max){if(!(min<=mode&&mode<=max))return NaN; const u=r(), c=(mode-min)/(max-min); return (u<c)? min+Math.sqrt(u*(max-min)*(mode-min)) : max-Math.sqrt((1-u)*(max-min)*(max-mode));}
+function sampleUniform(r,min,max){if(min>max)return NaN; return min+(max-min)*r();}
+function sampleNormal(r,mean,std){if(std<0)return NaN; let u=0,v=0; while(u===0)u=r(); while(v===0)v=r(); const z=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); return mean+std*z;}
+function sampleGamma(r,k,theta=1){
+  if(k<=0||!Number.isFinite(k)) return NaN;
+  if(k<1){
+    const u=r(); return sampleGamma(r,k+1,theta)*Math.pow(u,1/k);
+  }
+  const d=k-1/3, c=1/Math.sqrt(9*d);
+  while(true){
+    let x, v;
+    do{
+      let u=0, v0=0; while(u===0) u=r(); while(v0===0) v0=r();
+      x = Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v0);
+      v = Math.pow(1+c*x,3);
+    }while(v<=0);
+    const u2=r();
+    if(u2 < 1 - 0.0331*Math.pow(x,4)) return d*v*theta;
+    if(Math.log(u2) < 0.5*x*x + d*(1 - v + Math.log(v))) return d*v*theta;
+  }
+}
+function sampleBeta(r,a,b){
+  if(!(a>0 && b>0)) return NaN;
+  const x = sampleGamma(r,a,1);
+  const y = sampleGamma(r,b,1);
+  return x/(x+y);
+}
+function samplePERT(r,a,m,b,lambda=4){
+  if(!(a<b) || !(a<=m && m<=b)) return NaN;
+  const alpha = 1 + lambda*(m-a)/(b-a);
+  const beta  = 1 + lambda*(b-m)/(b-a);
+  const u = sampleBeta(r,alpha,beta);
+  return a + u*(b-a);
+}
+
+function isFrac(name){return ["Net to Gross","Porosity","Water Saturation","Recovery Factor"].includes(name);}
+
+/* ===== Proper truncation ===== */
+function boundsFor(name,fluid){
+  if(name==='Area' || name==='Thickness') return {min:1e-9, max:Infinity};
+  if(isFrac(name)) return {min:0, max:1};
+  if(name==='Bo') return {min:1.0, max:Infinity};
+  if(name==='Bg') return {min:1e-9, max:Infinity};
+  return {min:-Infinity, max:Infinity};
+}
+function sampleNormalTrunc(r, mean, std, min, max){
+  for(let k=0;k<32;k++){ const x = sampleNormal(r, mean, std); if(x>=min && x<=max) return x; }
+  return Math.max(min, Math.min(max, mean));
+}
+
+/* ===== Elements ===== */
+const FLUID = document.getElementById('fluid');
+const AREA = document.getElementById('areaUnit');
+const THICK = document.getElementById('thicknessUnit');
+let PARAMS = paramsFor('oil');
+
+const DIST_LABELS = {
+  "Discrete": ["Value 1","Value 2","Value 3"],
+  "Triangular": ["Min","Mode","Max"],
+  "Uniform": ["Min","(ignore)","Max"],
+  "Normal": ["Mean","Std Dev","(ignore)"],
+  "Known Distribution": ["P90 (Low)","P50 (Median)","P10 (High)"],
+  "PERT": ["Min","Mode","Max"]
+};
+
+/* X-axis labels for previews */
+function xLabelFor(name){
+  if(isFrac(name)) return 'Percent';
+  if(name==='Area') return AREA.options[AREA.selectedIndex].text;
+  if(name==='Thickness') return THICK.options[THICK.selectedIndex].text;
+  if(name==='Bo') return 'RB/STB';
+  if(name==='Bg') return 'scf/SCF';
+  return '';
+}
+
+/* ===== UI build ===== */
+function addWeightsRow(afterEl, idPrefix){
+  const div = document.createElement('div');
+  div.className = 'weights-row hidden';
+  div.id = idPrefix + '-weights';
+  div.innerHTML = `
+    <label>Weights (%)</label>
+    <div></div>
+    <input class="w w0" type="number" step="any" placeholder="e.g. 33">
+    <input class="w w1" type="number" step="any" placeholder="e.g. 33">
+    <input class="w w2" type="number" step="any" placeholder="e.g. 34">`;
+  afterEl.insertAdjacentElement('afterend', div);
+  return div;
+}
+function mountParams(){
+  const host=document.getElementById('params'); host.innerHTML='';
+  PARAMS.forEach(p=>{
+    const unit = p.name==="Bo" ? "(RB/STB)" : p.name==="Bg" ? "(scf/SCF)" : isFrac(p.name) ? "(fraction)" : "";
+    const row = document.createElement('div');
+    row.className = 'dist-row';
+    row.setAttribute('data-param', p.name);
+    row.innerHTML = `
+      <label>${p.name} ${unit}</label>
+      <div class="field">
+        <div class="slabel">Distribution</div>
+        <select class="dist-type">
+          <option>Discrete</option><option>Triangular</option><option>Uniform</option>
+          <option>PERT</option>
+          <option selected>Normal</option><option>Known Distribution</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="slabel l0">${DIST_LABELS['Normal'][0]}</div>
+        <input class="v v0" type="number" step="any">
+      </div>
+      <div class="field">
+        <div class="slabel l1">${DIST_LABELS['Normal'][1]}</div>
+        <input class="v v1" type="number" step="any">
+      </div>
+      <div class="field">
+        <div class="slabel l2">${DIST_LABELS['Normal'][2]}</div>
+        <input class="v v2" type="number" step="any">
+      </div>`;
+    host.appendChild(row);
+    const weights = addWeightsRow(row, p.name.replace(/\s+/g,'_'));
+    const sel = row.querySelector('.dist-type');
+    const inputs = [...row.querySelectorAll('input.v')];
+    const labs = [row.querySelector('.l0'),row.querySelector('.l1'),row.querySelector('.l2')];
+    function refresh(){
+      const L=DIST_LABELS[sel.value];
+      labs.forEach((lab,i)=>{
+        lab.textContent = L[i];
+        const ignore = L[i].includes('(ignore)');
+        lab.classList.toggle('disabled', ignore);
+        // Hide the entire field when "(ignore)"
+        const fieldDiv = labs[i].closest('.field');
+        if(ignore){
+          inputs[i].disabled = true;
+          inputs[i].value = '';
+          fieldDiv && fieldDiv.classList.add('hidden-field');
+        }else{
+          inputs[i].disabled = false;
+          fieldDiv && fieldDiv.classList.remove('hidden-field');
+        }
+      });
+      // Weights row visibility + separator handling
+      const rowEl = sel.closest('.dist-row');
+      if(sel.value==='Discrete'){
+        weights.classList.remove('hidden');
+        weights.classList.add('show-sep');
+        rowEl && rowEl.classList.add('with-weights');
+      }else{
+        weights.classList.add('hidden');
+        weights.classList.remove('show-sep');
+        rowEl && rowEl.classList.remove('with-weights');
+      }
+      renderDistPreviewsDebounced();
+    }
+    sel.addEventListener('change', refresh);
+    inputs.forEach(inp => inp.addEventListener('input', renderDistPreviewsDebounced));
+    weights.querySelectorAll('input').forEach(w=>w.addEventListener('input', renderDistPreviewsDebounced));
+    refresh();
+  });
+
+  // RF labels switch too
+  const rfSel = document.querySelector('.rf-type');
+  const rfWeights = document.getElementById('rf-weights');
+  const rfLabs = [document.querySelector('.rf-l0'),document.querySelector('.rf-l1'),document.querySelector('.rf-l2')];
+  function rfRefresh(){
+    const L=DIST_LABELS[rfSel.value];
+    const rfInputs=[...document.querySelectorAll('.rf-v')];
+    rfLabs.forEach((lab,i)=>{
+      lab.textContent = L[i];
+      const ignore = L[i].includes('(ignore)');
+      lab.classList.toggle('disabled', ignore);
+      const fieldDiv = lab.closest('.field');
+      if(ignore){
+        rfInputs[i].disabled = true;
+        rfInputs[i].value = '';
+        fieldDiv && fieldDiv.classList.add('hidden-field');
+      }else{
+        rfInputs[i].disabled = false;
+        fieldDiv && fieldDiv.classList.remove('hidden-field');
+      }
+    });
+    if(rfSel.value==='Discrete'){
+      rfWeights.classList.remove('hidden');
+      rfWeights.classList.add('show-sep');
+    } else {
+      rfWeights.classList.add('hidden');
+      rfWeights.classList.remove('show-sep');
+    }
+    renderDistPreviewsDebounced();
+  }
+  rfSel.addEventListener('change', rfRefresh);
+  rfWeights.querySelectorAll('input').forEach(w=>w.addEventListener('input', renderDistPreviewsDebounced));
+  document.querySelectorAll('.rf-v').forEach(inp=>inp.addEventListener('input', renderDistPreviewsDebounced));
+  rfRefresh();
+labelsAndFormula();
+  renderDistPreviewsDebounced();
+}
+
+function labelsForUI(){ return labelsFor(FLUID.value); }
+function labelsAndFormula(){
+  const L=labelsForUI();
+  document.getElementById('results-title').innerHTML=`Results (${L.unit}) <span class="chip">P90 / P50 / P10</span>`;
+  document.getElementById('metric-name').textContent=L.primary;
+  document.getElementById('metric-name-rec').textContent=L.metricRec;
+  document.getElementById('formula-note').innerHTML=L.formula;
+}
+function updateFluidUI(){
+  PARAMS=paramsFor(FLUID.value);
+  mountParams();
+  labelsAndFormula();
+  prefillDefaults();
+  renderDistPreviewsDebounced();
+}
+FLUID.addEventListener('change', updateFluidUI);
+
+/* Defaults so it's runnable */
+function prefillDefaults(){
+  const D = (FLUID.value === 'gas')
+    ? {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"__RF":[0.5,0.05]}
+    : {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"__RF":[0.5,0.05]};
+  document.querySelectorAll('#params .dist-row').forEach(row=>{
+    const name=row.getAttribute('data-param');
+    const pair=D[name]; const sel=row.querySelector('.dist-type'); sel.value='Normal';
+    const v0=row.querySelector('.v0'), v1=row.querySelector('.v1'), v2=row.querySelector('.v2');
+    if(pair){v0.value=pair[0]; v1.value=pair[1];} else {v0.value=''; v1.value='';}
+    v2.value=''; sel.dispatchEvent(new Event('change'));
+    const wrow = row.nextElementSibling;
+    if(wrow && wrow.classList.contains('weights-row')){
+      const ws = wrow.querySelectorAll('input'); ws[0].value='33'; ws[1].value='33'; ws[2].value='34';
+    }
+  });
+  document.querySelector('.rf-type').value='Normal';
+  document.querySelector('.rf-v0').value=D['__RF'][0];
+  document.querySelector('.rf-v1').value=D['__RF'][1];
+  document.querySelector('.rf-v2').value='';
+  const rfws=document.querySelectorAll('#rf-weights input'); rfws[0].value='33'; rfws[1].value='33'; rfws[2].value='34';
+}
+
+/* Helpers */
+function convTriplet(name, arr){
+  const t=arr.slice();
+  if(name==='Area'){const f=AREA_FACTORS[AREA.value]; for(let i=0;i<t.length;i++) if(!Number.isNaN(t[i])) t[i]*=f;}
+  if(name==='Thickness'){const f=THICK_FACTORS[THICK.value]; for(let i=0;i<t.length;i++) if(!Number.isNaN(t[i])) t[i]*=f;}
+  return t;
+}
+
+/* NEW: discrete values + weights handling (1–3 values) */
+function discreteValsAndWeights(rawVals, weightPercents){
+  const vals=[];
+  for(let i=0;i<3;i++){ const v = rawVals[i]; if(Number.isFinite(v)) vals.push(v); }
+  const n = vals.length;
+  if(n===0) return {vals:[], weights:[]};
+  let wInputs = Array.isArray(weightPercents) ? weightPercents : [...weightPercents].map(e=>Number(e.value));
+  const wFiltered=[];
+  for(let i=0;i<3;i++){
+    const v = rawVals[i];
+    if(Number.isFinite(v)){
+      const w = (Number.isFinite(wInputs[i]) && wInputs[i]>=0) ? wInputs[i] : NaN;
+      wFiltered.push(w);
+    }
+  }
+  const allMissing = wFiltered.every(x=>!Number.isFinite(x));
+  if(allMissing) return {vals, weights:Array(n).fill(1/n)};
+  const zeros = wFiltered.map(x=>Number.isFinite(x)?x:0);
+  let sum = zeros.reduce((a,b)=>a+b,0);
+  if(sum<=0) return {vals, weights:Array(n).fill(1/n)};
+  const weights = zeros.map(x=>x/sum);
+  return {vals, weights};
+}
+
+/* ===== Preview rendering ===== */
+function renderDistPreviewsDebounced(){ clearTimeout(previewTimer); previewTimer=setTimeout(renderDistPreviews, 180); }
+AREA.addEventListener('change', renderDistPreviewsDebounced);
+THICK.addEventListener('change', renderDistPreviewsDebounced);
+
+function renderDistPreviews(){
+  const grid=document.getElementById('previewGrid'); grid.innerHTML='';
+  const rows=[...document.querySelectorAll('#params .dist-row')];
+  const fluid=FLUID.value;
+
+  const entries = rows.map(row=>{
+    const name=row.getAttribute('data-param');
+    const type=row.querySelector('.dist-type').value;
+    const raw=[...row.querySelectorAll('input.v')].map(el=>el.value===""?NaN:Number(el.value));
+    let wPerc = [NaN,NaN,NaN];
+    const wrow=row.nextElementSibling;
+    if(type==='Discrete' && wrow && wrow.classList.contains('weights-row')){
+      wPerc = [...wrow.querySelectorAll('input')].map(x=>Number(x.value));
+    }
+    return {name,type,rawVals:raw, wPerc};
+  });
+  const rfType=document.querySelector('.rf-type').value;
+  const rfVals=[...document.querySelectorAll('.rf-v')].map(x=>x.value===""?NaN:Number(x.value));
+  let rfPerc = [NaN,NaN,NaN];
+  if(rfType==='Discrete') rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x=>Number(x.value));
+  entries.push({name:'Recovery Factor', type:rfType, rawVals:rfVals, wPerc:rfPerc});
+
+
+
+entries.forEach((d,idx)=>{
+  const id='pv_'+idx+'_'+d.name.replace(/\s+/g,'_');
+  const box=document.createElement('div'); box.className='mini'; box.id=id; grid.appendChild(box);
+
+  const isPercent = isFrac(d.name);
+  const xLabel = xLabelFor(d.name);
+
+  const X = [];
+  const Y = [];
+  function pushXY(x,y){ if(Number.isFinite(x) && Number.isFinite(y)){ X.push(x); Y.push(y); } }
+
+  function normalPDF(x,mu,sigma){
+    const z=(x-mu)/sigma;
+    return (1/(Math.sqrt(2*Math.PI)*sigma))*Math.exp(-0.5*z*z);
+  }
+  function triangularPDF(x,a,c,b){
+    if(x<a || x>b || a===b) return 0;
+    if(x===c){ return 2/(b-a); }
+    if(x<c){ return 2*(x-a)/((b-a)*(c-a)); }
+    return 2*(b-x)/((b-a)*(b-c));
+  }
+  function uniformPDF(x,a,b){ return (a<b && x>=a && x<=b) ? 1/(b-a) : 0; }
+function logGamma(z){
+  const p=[676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(z<0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI*z)) - logGamma(1-z);
+  z-=1; let x=0.99999999999980993;
+  for(let i=0;i<p.length;i++) x += p[i]/(z+i+1);
+  const t = z + p.length - 0.5;
+  return 0.5*Math.log(2*Math.PI) + (z+0.5)*Math.log(t) - t + Math.log(x);
+}
+function betaPDF01(x,a,b){
+  if(x<=0 || x>=1) return 0;
+  const logB = logGamma(a) + logGamma(b) - logGamma(a+b);
+  return Math.exp((a-1)*Math.log(x) + (b-1)*Math.log(1-x) - logB);
+}
+
+
+  const npts = 300;
+  function addCurve(a,b,pdf,params){
+    const aa = Math.min(a,b), bb = Math.max(a,b);
+    const dx = (bb - aa) / (npts - 1 || 1);
+    for(let i=0;i<npts;i++){
+      const x = aa + i*dx;
+      let y = pdf(x, ...params);
+      if(!Number.isFinite(y)) y = 0;
+      pushXY(x,y);
+    }
+  }
+
+  let trace;
+  if(d.type==='Normal'){
+    const mu = d.rawVals[0];
+    const sigma = Math.abs(d.rawVals[1]) || 1e-6;
+    addCurve(mu-4*sigma, mu+4*sigma, normalPDF, [mu, sigma]);
+    trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
+  }else if(d.type==='Triangular'){
+    const a = d.rawVals[0], c = d.rawVals[1], b = d.rawVals[2];
+    const aa = Math.min(a,b), bb = Math.max(a,b);
+    const cc = Math.max(aa, Math.min(c, bb));
+    addCurve(aa, bb, (x,aaa,ccc,bbb)=>triangularPDF(x,aaa,ccc,bbb), [aa, cc, bb]);
+    trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
+  }else if(d.type==='Uniform'){
+    const a = d.rawVals[0], b = d.rawVals[2];
+    const aa = Math.min(a,b), bb = Math.max(a,b);
+    addCurve(aa, bb, (x,aaa,bbb)=>uniformPDF(x,aaa,bbb), [aa, bb]);
+    trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
+  }else if(d.type==='Known Distribution'){
+    const {mean,sigma} = normalFromP90P50P10(d.rawVals[0], d.rawVals[1], d.rawVals[2]);
+    const s = Math.abs(sigma)||1e-6;
+    addCurve(mean-4*s, mean+4*s, normalPDF, [mean, s]);
+    trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
+
+  }else if(d.type==='PERT'){
+    const a = d.rawVals[0], m = d.rawVals[1], b = d.rawVals[2];
+    const lambda = 4;
+    if(Number.isFinite(a) && Number.isFinite(m) && Number.isFinite(b) && a<b && a<=m && m<=b){
+      const alpha = 1 + lambda*(m-a)/(b-a);
+      const beta  = 1 + lambda*(b-m)/(b-a);
+      const npts = 300;
+      for(let i=0;i<npts;i++){
+        const x = a + (b-a)*i/(npts-1);
+        const y = betaPDF01((x-a)/(b-a), alpha, beta) / (b-a);
+        pushXY(x,y);
+      }
+      trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
+    }else{
+      trace = {x:[], y:[], mode:'lines', type:'scatter'};
+    }
+
+  }else if(d.type==='Discrete'){
+    const {vals, weights} = discreteValsAndWeights(d.rawVals, d.wPerc);
+    if(vals.length>0){
+      let s = weights.reduce((a,b)=>a+b,0);
+      const ws = (s>0)? weights.map(w=>w/s) : weights.map(_=>1/weights.length);
+      trace = {
+        x: vals, y: ws,
+        type:'bar',
+        marker:{line:{width:0.6}, opacity:0.9}
+      };
+    }else{
+      trace = {x:[], y:[], type:'bar'};
+    }
+  }
+
+  const layout={
+    autosize:true, margin:{t:40,l:56,r:28,b:74},
+    title:{text:d.name,font:{size:14},x:0.02,xanchor:'left'},
+    xaxis:{title:xLabel, gridcolor:"#F3F4F6", tickfont:{size:11}, nticks:10, tickformat: isPercent?'.0%':undefined, autorange:true},
+    yaxis:{title:'', gridcolor:"#F3F4F6", tickfont:{size:11}, nticks:8, autorange:true},
+    paper_bgcolor:'#fff',plot_bgcolor:'#fff', showlegend:false
+  };
+
+  Plotly.newPlot(id,[trace],layout,{displayModeBar:false,responsive:true});
+});
+}
+
+/* ===== Tornado & deterministic helpers ===== */
+const Z = Z90;
+function baseFrom(type,v){ if(type==='Triangular'||type==='PERT')return v[1]; if(type==='Uniform')return 0.5*(v[0]+v[2]); if(type==='Normal')return v[0]; if(type==='Known Distribution')return v[1]; const xs=v.filter(Number.isFinite).sort((a,b)=>a-b); return xs[Math.floor(xs.length/2)]??NaN; }
+function lowHighFrom(type,v){ if(type==='Triangular'||type==='Uniform'||type==='PERT')return{low:v[0],high:v[2]}; if(type==='Normal')return{low:v[0]-Z*v[1],high:v[0]+Z*v[1]}; if(type==='Known Distribution')return{low:v[0],high:v[2]}; const xs=v.filter(Number.isFinite).sort((a,b)=>a-b); return {low:xs[0]??NaN,high:xs[xs.length-1]??NaN}; }
+function computeVol(fluid,A,H,NTG,PHI,SW,FVF){
+  return (fluid==='gas')
+    ? (43560*A*H*NTG*PHI*(1-SW)/FVF)/1e9
+    : (7758*A*H*NTG*PHI*(1-SW)/FVF)/1e6;
+}
+function mostLikely(type,v,wPerc){
+  if(type==='Normal') return v[0];
+  if(type==='Triangular' || type==='PERT') return v[1];
+  if(type==='Uniform') return (v[0]+v[2])/2;
+  if(type==='Known Distribution') return v[1];
+  if(type==='Discrete'){
+    const {vals, weights} = discreteValsAndWeights(v, wPerc);
+    if(vals.length===0) return NaN;
+    // choose the value with the highest weight (ties -> first occurrence)
+    let maxIdx = 0, maxW = -1;
+    for(let i=0;i<weights.length;i++){ if(weights[i]>maxW){ maxW = weights[i]; maxIdx = i; } }
+    return vals[maxIdx]
+  }
+  return NaN;
+}
+
+/* ===== Simulation ===== */
+function runSimulation(){
+  const err=document.getElementById('error'); err.textContent="";
+  const iters=parseInt(document.getElementById('iterations').value,10);
+  const nbins=Math.max(10, parseInt(document.getElementById('nbins').value,10)||100);
+  if(!(iters>0)){err.textContent="Iterations must be a positive number.";return;}
+  const rnd=seeded((document.getElementById('seed').value||"").trim());
+  const fluid=FLUID.value;
+
+  const rows=[...document.querySelectorAll('#params .dist-row')];
+  const dists=[];
+  for(const row of rows){
+    const name=row.getAttribute('data-param');
+    const type=row.querySelector('.dist-type').value;
+    const raw=[...row.querySelectorAll('input.v')].map(el=>el.value===""?NaN:Number(el.value));
+    if(type==='Triangular' && !(raw[0]<=raw[1] && raw[1]<=raw[2])){err.textContent=`Invalid Triangular values for ${name}.`;return;}
+    if(type==='PERT' && !(raw[0]<=raw[1] && raw[1]<=raw[2])){err.textContent=`Invalid PERT values for ${name}.`;return;}
+    if(type==='Uniform' && !(raw[0]<=raw[2])){err.textContent=`Invalid Uniform values for ${name}.`;return;}
+    if(type!=='Discrete'){
+      for(let j=0;j<3;j++){ if(Number.isNaN(raw[j]) && !DIST_LABELS[type][j].includes('(ignore)')){ err.textContent=`Please enter a valid number for ${name} (${DIST_LABELS[type][j]}).`; return; } }
+    }
+    const conv=convTriplet(name, raw);
+    let wPerc=[NaN,NaN,NaN];
+    const wrow=row.nextElementSibling;
+    if(type==='Discrete' && wrow && wrow.classList.contains('weights-row')){
+      wPerc=[...wrow.querySelectorAll('input')].map(x=>Number(x.value));
+    }
+    dists.push({name,type,raw:raw, v:conv, wPerc});
+  }
+
+  // Recovery Factor
+  const rfType=document.querySelector('.rf-type').value;
+  const rfRaw=[...document.querySelectorAll('.rf-v')].map(x=>x.value===""?NaN:Number(x.value));
+  if(rfType==='Triangular' && !(rfRaw[0]<=rfRaw[1] && rfRaw[1]<=rfRaw[2])){err.textContent='Invalid Triangular values for RF.';return;}
+  if(rfType==='PERT' && !(rfRaw[0]<=rfRaw[1] && rfRaw[1]<=rfRaw[2])){err.textContent='Invalid PERT values for RF.';return;}
+  if(rfType==='Uniform' && !(rfRaw[0]<=rfRaw[2])){err.textContent='Invalid Uniform values for RF.';return;}
+  let rfPerc=[NaN,NaN,NaN];
+  if(rfType==='Discrete') rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x=>Number(x.value));
+
+  function drawOne(t,rawVals,valsConv,name,weightsPerc){
+    const {min,max}=boundsFor(name,fluid);
+    if(t==='Discrete'){
+      const {vals, weights} = discreteValsAndWeights(valsConv, weightsPerc);
+      if(vals.length===0){ return NaN; }
+      const u=rnd(); let acc=0;
+      for(let i=0;i<vals.length;i++){ acc+=weights[i]; if(u<=acc){ return Math.max(min, Math.min(max, vals[i])); } }
+      return Math.max(min, Math.min(max, vals[vals.length-1]));
+    }else if(t==='Triangular'){ return sampleTriangular(rnd,valsConv[0],valsConv[1],valsConv[2]); }
+    else if(t==='Uniform'){ return sampleUniform(rnd,valsConv[0],valsConv[2]); }
+    else if(t==='Normal'){ return sampleNormalTrunc(rnd, valsConv[0], valsConv[1], min, max); }
+    else if(t==='PERT'){ const x=samplePERT(rnd, valsConv[0], valsConv[1], valsConv[2], 4); return Math.max(min, Math.min(max, x)); }
+    else { const {mean,sigma}=normalFromP90P50P10(valsConv[0],valsConv[1],valsConv[2]); return sampleNormalTrunc(rnd, mean, sigma, min, max); }
+  }
+
+  const n=iters;
+  const A=new Float64Array(n),H=new Float64Array(n),NTG=new Float64Array(n),PHI=new Float64Array(n),SW=new Float64Array(n),FVF=new Float64Array(n),RF=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    A[i]=drawOne(dists[0].type,dists[0].raw,dists[0].v,'Area',dists[0].wPerc);
+    H[i]=drawOne(dists[1].type,dists[1].raw,dists[1].v,'Thickness',dists[1].wPerc);
+    NTG[i]=drawOne(dists[2].type,dists[2].raw,dists[2].v,'Net to Gross',dists[2].wPerc);
+    PHI[i]=drawOne(dists[3].type,dists[3].raw,dists[3].v,'Porosity',dists[3].wPerc);
+    SW[i]=drawOne(dists[4].type,dists[4].raw,dists[4].v,'Water Saturation',dists[4].wPerc);
+    const fvfName=dists[5].name; FVF[i]=drawOne(dists[5].type,dists[5].raw,dists[5].v,fvfName,dists[5].wPerc);
+
+    if(rfType==='Discrete'){
+      const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
+      const u=rnd();
+      if(vals.length===0){ RF[i]=0; }
+      else{
+        let acc=0, pick=vals[vals.length-1];
+        for(let k=0;k<vals.length;k++){ acc+=weights[k]; if(u<=acc){ pick=vals[k]; break; } }
+        RF[i]=Math.max(0, Math.min(1, pick));
+      }
+    } else if(rfType==='Triangular'){ RF[i]=sampleTriangular(rnd,rfRaw[0],rfRaw[1],rfRaw[2]); }
+    else if(rfType==='Uniform'){ RF[i]=sampleUniform(rnd,rfRaw[0],rfRaw[2]); }
+    else if(rfType==='Normal'){ RF[i]=sampleNormalTrunc(rnd, rfRaw[0], rfRaw[1], 0, 1); }
+    else { const {mean,sigma}=normalFromP90P50P10(rfRaw[0],rfRaw[1],rfRaw[2]); RF[i]=sampleNormalTrunc(rnd, mean, sigma, 0, 1); }
+  }
+
+  // Volumes
+  const primary=new Float64Array(n), rec=new Float64Array(n);
+  const oil = (fluid!=='gas');
+  if(!oil){ for(let i=0;i<n;i++){ primary[i]=(43560*A[i]*H[i]*NTG[i]*PHI[i]*(1-SW[i])/FVF[i])/1e9; rec[i]=primary[i]*RF[i]; } }
+  else     { for(let i=0;i<n;i++){ primary[i]=(7758*A[i]*H[i]*NTG[i]*PHI[i]*(1-SW[i])/FVF[i])/1e6; rec[i]=primary[i]*RF[i]; } }
+
+  // Deterministic mid-case (most-likely) & percentile label
+  const detRaw={};
+  dists.forEach(d=>{
+    const b=boundsFor(d.name, fluid);
+    detRaw[d.name]=Math.max(b.min, Math.min(b.max, mostLikely(d.type, d.raw, d.wPerc)));
+  });
+  const detRF = Math.max(0, Math.min(1, mostLikely(rfType, rfRaw, rfPerc)));
+  let tornadoRows=[];
+
+  // Convert deterministic inputs to internal base units (Area->acres, Thickness->ft)
+  const detA   = (detRaw['Area']??NaN)      * AREA_FACTORS[AREA.value];
+  const detH   = (detRaw['Thickness']??NaN) * THICK_FACTORS[THICK.value];
+  const detNTG = detRaw['Net to Gross'];
+  const detPHI = detRaw['Porosity'];
+  const detSW  = detRaw['Water Saturation'];
+  const detFVF = (fluid==='gas') ? detRaw['Bg'] : detRaw['Bo'];
+
+  const detIn  = computeVol(fluid, detA, detH, detNTG, detPHI, detSW, detFVF);
+  const detRec = detIn*detRF;
+
+  // Percentiles + percentile of deterministic via ECDF
+  function quantiles(arr,qs=[0.1,0.5,0.9]){const s=Array.from(arr).sort((a,b)=>a-b),n=s.length,out=[];for(const q of qs){const pos=(n-1)*q,b=Math.floor(pos),t=pos-b;out.push(s[b+1]!==undefined? s[b]+t*(s[b+1]-s[b]):s[b]);}return out;}
+  const [P90,P50,P10]=quantiles(primary,[0.1,0.5,0.9]);
+  const [RP90,RP50,RP10]=quantiles(rec,[0.1,0.5,0.9]);
+
+  function ecdfY(sorted,x){let lo=0,hi=sorted.length-1; while(lo<=hi){const m=(lo+hi)>>1; if(sorted[m]<=x) lo=m+1; else hi=m-1;} return lo/sorted.length;}
+  const sIn=Array.from(primary).sort((a,b)=>a-b), sRec=Array.from(rec).sort((a,b)=>a-b);
+  const yDetIn=ecdfY(sIn,detIn), yDetRec=ecdfY(sRec,detRec);
+  const pLab = y => `P${Math.max(0, Math.min(100, 100 - Math.round(y*100)))}`;
+
+  // Table
+  const L=labelsFor(fluid);
+  const fmt=x=> (Math.abs(x)>=100) ? x.toFixed(0) : x.toFixed(2);
+  document.querySelector('.s-p90').textContent=fmt(P90);
+  document.querySelector('.s-p50').textContent=fmt(P50);
+  document.querySelector('.s-p10').textContent=fmt(P10);
+  document.querySelector('.s-mid').textContent = `${fmt(detIn)} (${pLab(yDetIn)})`;
+  document.querySelector('.r-p90').textContent=fmt(RP90);
+  document.querySelector('.r-p50').textContent=fmt(RP50);
+  document.querySelector('.r-p10').textContent=fmt(RP10);
+  document.querySelector('.r-mid').textContent = `${fmt(detRec)} (${pLab(yDetRec)})`;
+  document.querySelectorAll('#summary td').forEach(td=>td.classList.remove('muted'));
+  document.getElementById('formula-note').innerHTML=L.formula;
+
+  // ===== Charts =====
+  const config={displayModeBar:true,responsive:true,toImageButtonOptions:{format:'png',filename:'rangerover',width:1600,height:1000,scale:3}};
+  function baseLayout(title,x,y){return{
+    autosize:true, title:{text:title,font:{size:19,color:"#111827"},x:0.02,xanchor:'left'},
+    paper_bgcolor:'#fff',plot_bgcolor:'#fff',
+    margin:{t:86,l:90,r:46,b:96},
+    xaxis:{title:x,gridcolor:"#EFEFEF",color:"#374151",ticks:'outside',ticklen:6,tickwidth:1,tickcolor:'#e5e7eb',titlefont:{size:15},tickfont:{size:13}},
+    yaxis:{title:y,gridcolor:"#EFEFEF",color:"#374151",ticks:'outside',ticklen:6,tickwidth:1,tickcolor:'#e5e7eb',titlefont:{size:15},tickfont:{size:13}, fixedrange:true},
+    hoverlabel:{font:{size:12}},
+    showlegend:false
+  };}
+
+  // CDF helper
+  function cdf(arr){const s=Array.from(arr).sort((a,b)=>a-b), y=s.map((_,i)=>(i+1)/s.length);return {x:s,y};}
+  const cMain=cdf(primary), cRec=cdf(rec);
+
+  // In-place CDF with percentile markers + deterministic
+  Plotly.newPlot('cdf-main',[
+    {x:cMain.x,y:cMain.y,mode:'lines',line:{width:3,color:'var(--blue)'}},
+    {x:[P90,P50,P10], y:[0.1,0.5,0.9], mode:'markers+text',
+      marker:{size:10,color:'#ED1C24',symbol:'circle'},
+      text:[`P90=${fmt(P90)}`,`P50=${fmt(P50)}`,`P10=${fmt(P10)}`],
+      textposition:['right center','left center','right center'], textfont:{size:12}, hoverinfo:'skip'},
+    {x:[detIn], y:[yDetIn], mode:'markers+text',
+      marker:{size:12,color:'var(--mid)',symbol:'diamond'},
+      text:[`Det. Mid Case=${fmt(detIn)} (${pLab(yDetIn)})`], textposition:'top right', textfont:{size:12}, hoverinfo:'skip'}
+  ], baseLayout(L.cdfTitle, L.xMain, 'Cumulative Probability'), config);
+
+  // Hist helper (keep verticals + mid)
+  const vLines=xs=>xs.map(x=>({type:'line',x0:x,x1:x,y0:0,y1:1,yref:'paper',line:{dash:'dot',width:3,color:'#ED1C24'}}));
+  const midLine=x=>({type:'line',x0:x,x1:x,y0:0,y1:1,yref:'paper',line:{dash:'dot',width:3,color:'var(--mid)'}});
+  function histogram(arr,tgt,title,xlabel,marks,mid){
+    const trace={x:Array.from(arr),type:'histogram',nbinsx:nbins,
+      marker:{color:'var(--blue-light)',line:{width:0.8,color:'var(--blue-stroke)'}}};
+    Plotly.newPlot(tgt,[trace],baseLayout(title,xlabel,'Frequency'),config)
+      .then(gd=>Plotly.relayout(gd,{shapes:[...vLines(marks), midLine(mid)]}));
+  }
+  histogram(primary,'hist-main',L.histTitle,L.xMain,[P90,P50,P10],detIn);
+
+  // Recoverable CDF
+  Plotly.newPlot('cdf-rec',[
+    {x:cRec.x,y:cRec.y,mode:'lines',line:{width:3,color:'var(--blue)'}},
+    {x:[RP90,RP50,RP10], y:[0.1,0.5,0.9], mode:'markers+text',
+      marker:{size:10,color:'#ED1C24',symbol:'circle'},
+      text:[`P90=${fmt(RP90)}`,`P50=${fmt(RP50)}`,`P10=${fmt(RP10)}`],
+      textposition:['right center','left center','right center'], textfont:{size:12}, hoverinfo:'skip'},
+    {x:[detRec], y:[yDetRec], mode:'markers+text',
+      marker:{size:12,color:'var(--mid)',symbol:'diamond'},
+      text:[`Det. Mid Case=${fmt(detRec)} (${pLab(yDetRec)})`], textposition:'top right', textfont:{size:12}, hoverinfo:'skip'}
+  ], baseLayout(L.cdfTitle+' (Recoverable)', L.xRec, 'Cumulative Probability'), config);
+
+  histogram(rec,'hist-rec',L.histTitle+' (Recoverable)',L.xRec,[RP90,RP50,RP10],detRec);
+
+
+
+  /* ---- Tornado (unit-aware; TRUE deltas; sorted; explicit X labels) ---- */
+  // Base values correspond to the Deterministic Mid Case (means/weighted means) — USE WEIGHT‑AWARE detRaw
+  const baseVals = [detA, detH, detNTG, detPHI, detSW, detFVF];
+  const baseVol = computeVol(fluid, baseVals[0],baseVals[1],baseVals[2],baseVals[3],baseVals[4],baseVals[5]);
+
+  const names=[], lows=[], highs=[], spans=[];
+  dists.forEach((d,idx)=>{
+    const conv = convTriplet(d.name, d.raw.slice());
+    let {low,high} = lowHighFrom(d.type, conv);
+    const b = boundsFor(d.name,fluid);
+    low = Math.max(b.min, Math.min(b.max, low));
+    high = Math.max(b.min, Math.min(b.max, high));
+    const vLo = baseVals.slice(), vHi = baseVals.slice();
+    vLo[idx] = low; vHi[idx] = high;
+    const volLo = computeVol(fluid, vLo[0],vLo[1],vLo[2],vLo[3],vLo[4],vLo[5]);
+    const volHi = computeVol(fluid, vHi[0],vHi[1],vHi[2],vHi[3],vHi[4],vHi[5]);
+    names.push(d.name);
+    lows.push(volLo - baseVol);
+    highs.push(volHi - baseVol);
+    spans.push(Math.max(Math.abs(volLo-baseVol), Math.abs(volHi-baseVol)));
+  });
+
+  const order=[...names.keys()].sort((a,b)=>spans[b]-spans[a]);
+  const y=order.map(i=>names[i]);
+  const xLow=order.map(i=>lows[i]);
+  const xHigh=order.map(i=>highs[i]);
+
+  const cs = getComputedStyle(document.documentElement);
+  const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
+  const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
+  const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+  const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+
+  renderTornadoQC(tornadoRows);
+
+  // Helper: render QC table of Base/Low/High inputs used in Tornado
+  function renderTornadoQC(rows){
+    try{
+      const el = document.getElementById('tornado-qc');
+      if(!el) return;
+      if(!rows || rows.length===0){ el.textContent=''; return; }
+      let html = '<table style="border-collapse:collapse; width:100%; margin-top:4px;">';
+      html += '<tr><th style="text-align:left;border-bottom:1px solid #eee;padding:2px 4px;">Param</th>'+
+              '<th style="text-align:right;border-bottom:1px solid #eee;padding:2px 4px;">Base</th>'+
+              '<th style="text-align:right;border-bottom:1px solid #eee;padding:2px 4px;">Low</th>'+
+              '<th style="text-align:right;border-bottom:1px solid #eee;padding:2px 4px;">High</th></tr>';
+      rows.forEach(r=>{
+        html += `<tr>
+          <td style="padding:2px 4px;">${r.name}</td>
+          <td style="padding:2px 4px; text-align:right;">${r.base}</td>
+          <td style="padding:2px 4px; text-align:right;">${r.low}</td>
+          <td style="padding:2px 4px; text-align:right;">${r.high}</td>
+        </tr>`;
+      });
+      html += '</table>';
+      el.innerHTML = html;
+    }catch(e){ console.warn('QC table render error', e); }
+  }
+Plotly.newPlot('tornado',[
+    {type:'bar',orientation:'h',y:y,x:xLow,marker:{color:colorsLow},width:0.6,
+     name:'Δ at Low (vs Det. Mid Case)', hovertemplate:'%{y}<br>Δ at Low: %{x:.2f} '+L.unit+'<extra></extra>'},
+    {type:'bar',orientation:'h',y:y,x:xHigh,marker:{color:colorsHigh},width:0.6,
+     name:'Δ at High (vs Det. Mid Case)', hovertemplate:'%{y}<br>Δ at High: %{x:.2f} '+L.unit+'<extra></extra>'}
+  ],{
+    autosize:true, showlegend:false,
+    legend:{orientation:'h', x:0.02, y:1.08},
+    title:{text:'Sensitivity (Tornado) — '+L.primary+'  (relative to Deterministic Mid Case)',font:{size:19,color:"#111827"},x:0.02,xanchor:'left'},
+    barmode:'overlay',
+    margin:{t:86,l:220,r:46,b:110},
+    xaxis:{
+      title:'Change in '+L.primary+' ('+L.unit+')',
+      gridcolor:"#EFEFEF",
+      zeroline:true, zerolinewidth:1, zerolinecolor:'#9CA3AF',
+      showticklabels:true,
+      ticks:'outside',
+      ticklen:6, tickwidth:1, tickcolor:'#e5e7eb',
+      tickformat:'.2f'
+    },
+    yaxis:{title:'',automargin:true,categoryorder:'array',categoryarray:y,autorange:'reversed'},
+    paper_bgcolor:'#fff',plot_bgcolor:'#fff'
+  }, config);
+
+  // CSV export
+  document.getElementById('downloadCsv').disabled=false;
+  document.getElementById('downloadSamples').disabled=false;
+  document.getElementById('downloadCsv').onclick=()=>downloadSummaryCSV(FLUID.value, L, {P90,P50,P10,RP90,RP50,RP10,detIn,detRec,yDetIn,yDetRec,fmt});
+  lastSim={unit:L.unit,n,primary,rec,fluid,inputs:{A,H,NTG,PHI,SW,FVF,RF}};
+  document.getElementById('downloadSamples').onclick=downloadSamplesCSV;
+
+  wireSyncedZoom();
+
+
+  // Sync X across the four result plots
+  wireSyncedZoom();
+
+
+  // Sync X across the four result plots
+  wireSyncedZoom();
+}
+
+/* ===== CSV ===== */
+function downloadSummaryCSV(fluid, L, extras){
+  const {P90,P50,P10,RP90,RP50,RP10,detIn,detRec,yDetIn,yDetRec,fmt}=extras;
+  const pLab = y => `P${Math.max(0, Math.min(100, 100 - Math.round(y*100)))}`;
+  const lines=[];
+  lines.push('Section,Field,Key,Value');
+  lines.push(`Meta,Fluid,,${FLUID.value}`);
+  lines.push(`Meta,Iterations,,${document.getElementById('iterations').value}`);
+  lines.push(`Meta,Seed,,${(document.getElementById('seed').value||"").trim()}`);
+  lines.push(`Meta,Histogram bins,,${document.getElementById('nbins').value}`);
+  lines.push(`Units,Area,,${document.getElementById('areaUnit').value}`);
+  lines.push(`Units,Thickness,,${document.getElementById('thicknessUnit').value}`);
+  [...document.querySelectorAll('#params .dist-row')].forEach(row=>{
+    const name=row.getAttribute('data-param');
+    const type=row.querySelector('.dist-type').value;
+    const v=[...row.querySelectorAll('input.v')].map(x=>x.value);
+    lines.push(`Param,${name},Distribution,${type}`);
+    lines.push(`Param,${name},V0,${v[0]||''}`); lines.push(`Param,${name},V1,${v[1]||''}`); lines.push(`Param,${name},V2,${v[2]||''}`);
+    if(type==='Discrete'){
+      const wrow=row.nextElementSibling;
+      const ws=wrow?[...wrow.querySelectorAll('input')].map(x=>x.value):['','',''];
+      lines.push(`Param,${name},Weight1(%),${ws[0]}`); lines.push(`Param,${name},Weight2(%),${ws[1]}`); lines.push(`Param,${name},Weight3(%),${ws[2]}`);
+    }
+  });
+  const rfType=document.querySelector('.rf-type').value;
+  const rfV=[...document.querySelectorAll('.rf-v')].map(x=>x.value);
+  lines.push(`Param,Recovery Factor,Distribution,${rfType}`);
+  lines.push(`Param,Recovery Factor,V0,${rfV[0]||''}`);
+  lines.push(`Param,Recovery Factor,V1,${rfV[1]||''}`);
+  lines.push(`Param,Recovery Factor,V2,${rfV[2]||''}`);
+  if(rfType==='Discrete'){
+    const ws=[...document.querySelectorAll('#rf-weights input')].map(x=>x.value);
+    lines.push(`Param,Recovery Factor,Weight1(%),${ws[0]||''}`);
+    lines.push(`Param,Recovery Factor,Weight2(%),${ws[1]||''}`);
+    lines.push(`Param,Recovery Factor,Weight3(%),${ws[2]||''}`);
+  }
+  lines.push(`Result,${L.primary},P90,${fmt(P90)} ${L.unit}`);
+  lines.push(`Result,${L.primary},P50,${fmt(P50)} ${L.unit}`);
+  lines.push(`Result,${L.primary},P10,${fmt(P10)} ${L.unit}`);
+  lines.push(`Result,${L.primary},Deterministic,${fmt(detIn)} ${L.unit} (${pLab(yDetIn)})`);
+  lines.push(`Result,${L.metricRec},P90,${fmt(RP90)} ${L.unit}`);
+  lines.push(`Result,${L.metricRec},P50,${fmt(RP50)} ${L.unit}`);
+  lines.push(`Result,${L.metricRec},P10,${fmt(RP10)} ${L.unit}`);
+  lines.push(`Result,${L.metricRec},Deterministic,${fmt(detRec)} ${L.unit} (${pLab(yDetRec)})`);
+  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='volumetrics_summary.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function downloadSamplesCSV(){
+  if(!lastSim) return;
+  const {unit,n,primary,rec,fluid,inputs} = lastSim;
+  const {A,H,NTG,PHI,SW,FVF,RF} = inputs || {};
+  const fvfLabel = (fluid==='gas') ? 'Bg (scf/SCF)' : 'Bo (RB/STB)';
+  const header=['Iter','In-Place('+unit+')','Recoverable('+unit+')','Area (acres)','Thickness (ft)','NtG (frac)','Porosity (frac)','Sw (frac)', fvfLabel, 'RF (frac)'];
+  const lines=[header.join(',')];
+  for(let i=0;i<n;i++){
+    const row=[
+      i+1,
+      primary[i],
+      rec[i],
+      A ? A[i] : '',
+      H ? H[i] : '',
+      NTG ? NTG[i] : '',
+      PHI ? PHI[i] : '',
+      SW ? SW[i] : '',
+      FVF ? FVF[i] : '',
+      RF ? RF[i] : ''
+    ];
+    lines.push(row.join(','));
+  }
+  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='volumetrics_samples.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+/* ===== Synced X-axis zoom across results ===== */
+function wireSyncedZoom(){
+  const ids=['cdf-main','hist-main','cdf-rec','hist-rec'];
+  ids.forEach(id=>{
+    const gd=document.getElementById(id);
+    gd.on('plotly_relayout',(ev)=>{
+      if(syncing) return;
+      const r0=ev['xaxis.range[0]'], r1=ev['xaxis.range[1]'];
+      if(r0!==undefined && r1!==undefined){
+        syncing=true;
+        Promise.all(ids.filter(x=>x!==id).map(other=>Plotly.relayout(other, {'xaxis.range':[r0,r1]})))
+          .finally(()=>syncing=false);
+      }
+    });
+  });
+}
+
+/* Buttons & modal */
+document.getElementById('run').addEventListener('click', runSimulation);
+document.getElementById('reset').addEventListener('click', ()=>location.reload());
+document.querySelectorAll('button[data-reset]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{ const id=btn.getAttribute('data-reset'); Plotly.relayout(id, {'xaxis.autorange': true}); });
+});
+const helpBtn = document.getElementById('helpBtn');
+const helpModal = document.getElementById('helpModal');
+const helpClose = document.getElementById('helpClose');
+helpBtn.addEventListener('click', ()=>{ helpModal.classList.add('open'); helpModal.setAttribute('aria-hidden','false'); });
+helpClose.addEventListener('click', ()=>{ helpModal.classList.remove('open'); helpModal.setAttribute('aria-hidden','true'); });
+helpModal.addEventListener('click', (e)=>{ if(e.target===helpModal){ helpClose.click(); } });
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && helpModal.classList.contains('open')) helpClose.click(); });
+
+/* Bootstrap */
+mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
+</script>
+<script>
+// === Scenario Builder (additive; uses existing helpers) ===
+(function(){
+  const Scenarios = [];
+  let BaselineId = null;
+
+  function readCurrentScenario(name){
+    const fluid = FLUID.value;
+    const iterations = parseInt(document.getElementById('iterations').value,10) || 10000;
+    const seed = (document.getElementById('seed').value || '').trim();
+    const nbins = Math.max(10, parseInt(document.getElementById('nbins').value,10)||100);
+    const areaUnit = document.getElementById('areaUnit').value;
+    const thickUnit = document.getElementById('thicknessUnit').value;
+    const rfType = document.querySelector('.rf-type').value;
+    const rfVals = [...document.querySelectorAll('.rf-v')].map(x=>x.value===""?NaN:Number(x.value));
+    const rfWeights = (rfType==='Discrete') ? [...document.querySelectorAll('#rf-weights input')].map(x=>Number(x.value)) : [NaN,NaN,NaN];
+
+    const rows=[...document.querySelectorAll('#params .dist-row')];
+    const inputs = {};
+    for(const row of rows){
+      const nameAttr = row.getAttribute('data-param');
+      const type = row.querySelector('.dist-type').value;
+      const raw = [...row.querySelectorAll('input.v')].map(el=>el.value===""?NaN:Number(el.value));
+      const wPerc = (type==='Discrete')
+        ? [...row.nextElementSibling.querySelectorAll('input')].map(x=>Number(x.value))
+        : [NaN,NaN,NaN];
+      inputs[nameAttr] = { type, values: raw, weights: wPerc };
+    }
+
+    return {
+      id: `scn_${Date.now()}_${Math.floor(Math.random()*1e6)}`,
+      name: name || `Scenario ${Scenarios.length+1}`,
+      fluid,
+      units: { area: areaUnit, thick: thickUnit },
+      rf: { type: rfType, values: rfVals, weights: rfWeights },
+      options: { iterations, seed, nbins },
+      inputs
+    };
+  }
+
+  function renderScenarioList(){
+    const list = document.getElementById('scnList');
+    list.innerHTML = '';
+    Scenarios.forEach((S) => {
+      const div = document.createElement('div');
+      div.className = 'scn-card';
+      div.innerHTML = `
+        <div class="head">
+          <div class="meta">
+            <strong>${S.name}</strong>
+            <span class="tag">${S.fluid}</span>
+            <span class="pill">${S.options.iterations} iters</span>
+            <span class="pill">${S.units.area}, ${S.units.thick}</span>
+          </div>
+          <div class="actions">
+            <button data-act="clone" data-id="${S.id}">Clone</button>
+            <button data-act="delete" data-id="${S.id}" class="good">Delete</button>
+          </div>
+        </div>`;
+      list.appendChild(div);
+    });
+
+    const baseSel = document.getElementById('baselineSelect');
+    baseSel.innerHTML = Scenarios.map(S=>`<option value="${S.id}">${S.name}</option>`).join('');
+    if(BaselineId===null && Scenarios.length>0) BaselineId = Scenarios[0].id;
+    if(BaselineId) baseSel.value = BaselineId;
+  }
+
+  document.getElementById('scnList').addEventListener('click', (e)=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    const id = btn.getAttribute('data-id');
+    const idx = Scenarios.findIndex(s=>s.id===id);
+    if(idx<0) return;
+    const act = btn.getAttribute('data-act');
+    if(act==='delete'){
+      Scenarios.splice(idx,1);
+      if(BaselineId===id) BaselineId = Scenarios[0]?.id || null;
+      renderScenarioList();
+    }else if(act==='clone'){
+      const copy = JSON.parse(JSON.stringify(Scenarios[idx]));
+      copy.id = `scn_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
+      copy.name = copy.name + " (copy)";
+      Scenarios.push(copy);
+      renderScenarioList();
+    }
+  });
+
+  (function(){const el=document.getElementById('baselineSelect'); if(!el) return; el.addEventListener('change', (e)=>{
+    BaselineId = e.target.value;
+  });
+
+  (function(){const el=document.getElementById('btnAddScenario'); if(!el) return; el.addEventListener('click', ()=>{
+    const nm = (document.getElementById('scnName').value || '').trim();
+    const scn = readCurrentScenario(nm);
+    Scenarios.push(scn);
+    if(!BaselineId) BaselineId = scn.id;
+    renderScenarioList();
+    document.getElementById('scnName').value='';
+  });
+
+  (function(){const el=document.getElementById('btnExportScenarios'); if(!el) return; el.addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(Scenarios, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'scenarios.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  function seededFrom(seedStr){
+    return seeded(seedStr || 'scn_shared_seed'); // reuse app RNG
+  }
+
+  function sampleOne(dist, rnd, name, fluid){
+    const {type, values, weights} = dist;
+    const {min, max} = boundsFor(name, fluid);
+    function clamp(x){ return Math.max(min, Math.min(max, x)); }
+
+    if(type==='Discrete'){
+      const {vals, weights:wn} = (function(rawVals, wPerc){
+        // reuse app helper if exists; else do a quick normalize
+        try { return discreteValsAndWeights(rawVals, wPerc); }
+        catch(e){
+          const xs = rawVals.filter(Number.isFinite);
+          const n = xs.length || 1;
+          const ws = (wPerc||[]).slice(0,n);
+          const sum = ws.reduce((a,b)=>a+(Number.isFinite(b)?b:0),0) || 1;
+          return {vals: xs, weights: ws.map(x=>(Number.isFinite(x)?x:0)/sum)};
+        }
+      })(values, weights);
+      if(!vals || vals.length===0) return NaN;
+      const u=rnd(); let acc=0;
+      for(let i=0;i<vals.length;i++){ acc+=wn[i]; if(u<=acc){ return clamp(vals[i]); } }
+      return clamp(vals[vals.length-1]);
+    }
+    if(type==='Triangular'){ return clamp(sampleTriangular(rnd, values[0], values[1], values[2])); }
+    if(type==='Uniform'){ return clamp(sampleUniform(rnd, values[0], values[2])); }
+    if(type==='Normal'){ return clamp(sampleNormalTrunc(rnd, values[0], values[1], min, max)); }
+    if(type==='Known Distribution'){
+      const {mean,sigma} = normalFromP90P50P10(values[0], values[1], values[2]);
+      return clamp(sampleNormalTrunc(rnd, mean, sigma, min, max));
+    }
+    return clamp(values[1] ?? values[0] ?? NaN);
+  }
+
+  function simulateScenario(S){
+    const n = S.options.iterations || 10000;
+    const rnd = seededFrom(S.options.seed || 'scn');
+
+    const A=new Float64Array(n),H=new Float64Array(n),NTG=new Float64Array(n),PHI=new Float64Array(n),
+          SW=new Float64Array(n),FVF=new Float64Array(n),RF=new Float64Array(n);
+
+    for(let i=0;i<n;i++){
+      A[i]   = sampleOne(S.inputs['Area'], rnd, 'Area', S.fluid)       * AREA_FACTORS[S.units.area];
+      H[i]   = sampleOne(S.inputs['Thickness'], rnd, 'Thickness', S.fluid) * THICK_FACTORS[S.units.thick];
+      NTG[i] = sampleOne(S.inputs['Net to Gross'], rnd, 'Net to Gross', S.fluid);
+      PHI[i] = sampleOne(S.inputs['Porosity'], rnd, 'Porosity', S.fluid);
+      SW[i]  = sampleOne(S.inputs['Water Saturation'], rnd, 'Water Saturation', S.fluid);
+      const fvfName = (S.fluid==='gas') ? 'Bg' : 'Bo';
+      FVF[i] = sampleOne(S.inputs[fvfName], rnd, fvfName, S.fluid);
+      RF[i]  = Math.max(0, Math.min(1, sampleOne(S.rf, rnd, 'Recovery Factor', S.fluid)));
+    }
+
+    const primary=new Float64Array(n), rec=new Float64Array(n);
+    if(S.fluid==='gas'){
+      for(let i=0;i<n;i++){ primary[i]=computeVol('gas', A[i],H[i],NTG[i],PHI[i],SW[i],FVF[i]); rec[i]=primary[i]*RF[i]; }
+    }else{
+      for(let i=0;i<n;i++){ primary[i]=computeVol('oil', A[i],H[i],NTG[i],PHI[i],SW[i],FVF[i]); rec[i]=primary[i]*RF[i]; }
+    }
+
+    const sRec = Array.from(rec).filter(Number.isFinite).sort((a,b)=>a-b);
+    const nRec = sRec.length;
+    const p = q => {
+      if(nRec===0) return NaN;
+      const pos = (nRec-1)*q, b = Math.floor(pos), t = pos-b;
+      return (1-t)*sRec[b] + t*sRec[Math.min(nRec-1,b+1)];
+    };
+    const stats = { p10:p(0.1), p50:p(0.5), p90:p(0.9), mean: sRec.reduce((a,b)=>a+b,0)/Math.max(1,nRec) };
+
+    return { id:S.id, name:S.name, rec, stats };
+  }
+
+  document.getElementById('btnRunAll').addEventListener('click', ()=>{
+    if(Scenarios.length<2){ alert('Add at least two scenarios to compare.'); return; }
+    const results = Scenarios.map(simulateScenario);
+    renderComparison(results);
+  });
+
+  function renderComparison(results){
+    const baseId = BaselineId || results[0].id;
+    const base = results.find(r=>r.id===baseId) || results[0];
+
+    const traces = results.map((r)=>{
+      const xs = Array.from(r.rec).filter(Number.isFinite).sort((a,b)=>a-b);
+      const n = xs.length; const ys = xs.map((_,i)=>(i+1)/n);
+      return { x: xs, y: ys, mode:'lines', name: r.name };
+    });
+    const L = labelsFor(FLUID.value);
+    Plotly.newPlot('scnCDF', traces, {
+      title:{text:'Recoverable CDF — scenarios', x:0.02, xanchor:'left'},
+      xaxis:{title:L.xRec}, yaxis:{title:'Cumulative Probability', range:[0,1]},
+      paper_bgcolor:'#fff',plot_bgcolor:'#fff', showlegend:true, legend:{orientation:'h'}
+    }, {displayModeBar:true,responsive:true});
+
+    const rows = results.map(r=>{
+      const fmt = (x)=> (Number.isFinite(x)? ((Math.abs(x)>=100)? x.toFixed(0): x.toFixed(2)) : '—');
+      const S = r.stats, B = base.stats;
+      const dP50 = (S.p50 - B.p50);
+      const dP50p = (Number.isFinite(B.p50) && B.p50!==0) ? (dP50/B.p50*100) : NaN;
+      return `
+        <tr>
+          <td>${r.name}${r.id===base.id?' ⭐':''}</td>
+          <td style="text-align:right">${fmt(S.p10)}</td>
+          <td style="text-align:right">${fmt(S.p50)}</td>
+          <td style="text-align:right">${fmt(S.p90)}</td>
+          <td style="text-align:right">${fmt(S.mean)}</td>
+          <td style="text-align:right">${fmt(dP50)}</td>
+          <td style="text-align:right">${Number.isFinite(dP50p)? dP50p.toFixed(1)+'%':'—'}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('scnTable').innerHTML = `
+      <table>
+        <thead>
+          <tr><th>Scenario</th><th>P10</th><th>P50</th><th>P90</th><th>Mean</th><th>ΔP50 vs ${base.name}</th><th>ΔP50 %</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  // wire baseline change early
+  (function(){const el=document.getElementById('baselineSelect'); if(!el) return; el.addEventListener('change', (e)=>{ BaselineId = e.target.value; });
+
+  // add scenario
+  (function(){const el=document.getElementById('btnAddScenario'); if(!el) return; el.addEventListener('click', ()=>{
+    const nm = (document.getElementById('scnName').value || '').trim();
+    const scn = readCurrentScenario(nm);
+    Scenarios.push(scn);
+    if(!BaselineId) BaselineId = scn.id;
+    document.getElementById('scnName').value='';
+    renderScenarioList();
+  });
+
+  // export
+  (function(){const el=document.getElementById('btnExportScenarios'); if(!el) return; el.addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(Scenarios, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'scenarios.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+})();
+</script>
+
+</body>
+</html>
+
