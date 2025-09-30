@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="768531bf-0bd2-4943-9d88-de75cd453f36" name="Changes" comment="Range Rover - Single Fluid and Single Reservoir">
-      <change beforePath="$PROJECT_DIR$/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/index.html" afterDir="false" />
-    </list>
+    <list default="true" id="768531bf-0bd2-4943-9d88-de75cd453f36" name="Changes" comment="Amendment to borders" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -31,6 +32,9 @@
     "accountId": "cdaf02a0-5fe3-4fff-b17b-16ad88e4b115"
   }
 }]]></component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
   <component name="ProjectColorInfo"><![CDATA[{
   "associatedIndex": 6
 }]]></component>
@@ -71,7 +75,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1759191761957</updated>
-      <workItem from="1759191762971" duration="592000" />
+      <workItem from="1759191762971" duration="2808000" />
     </task>
     <task id="LOCAL-00001" summary="Range Rover - Single Fluid and Single Reservoir">
       <option name="closed" value="true" />
@@ -97,7 +101,31 @@
       <option name="project" value="LOCAL" />
       <updated>1759191954366</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Range Rover - Single Fluid and Single Reservoir">
+      <option name="closed" value="true" />
+      <created>1759192361818</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1759192361818</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Range Rover - Single Fluid and Single Reservoir">
+      <option name="closed" value="true" />
+      <created>1759193016140</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1759193016140</updated>
+    </task>
+    <task id="LOCAL-00006" summary="Amendment to borders">
+      <option name="closed" value="true" />
+      <created>1759193559559</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1759193559559</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -105,6 +133,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Range Rover - Single Fluid and Single Reservoir" />
-    <option name="LAST_COMMIT_MESSAGE" value="Range Rover - Single Fluid and Single Reservoir" />
+    <MESSAGE value="Amendment to borders" />
+    <option name="LAST_COMMIT_MESSAGE" value="Amendment to borders" />
   </component>
 </project>
