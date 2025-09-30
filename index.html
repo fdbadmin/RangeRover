@@ -184,6 +184,13 @@
   /* Hide fields that are marked to ignore */
   .field.hidden-field{ display:none; }
 
+  
+  /* Make CDF and Histograms 5% taller */
+  #cdf-main, #hist-main, #cdf-rec, #hist-rec{
+    aspect-ratio: 16 / 10.5; /* 5% taller than 16/10 */
+    min-height: 462px;       /* 5% taller than 440px */
+  }
+
 </style>
 </head>
 <body>
@@ -191,7 +198,7 @@
   <header>
     <div class="brand">
       <div>
-        <h1>RangeRover <span class="pill">Shell</span></h1>
+        <h1>RangeRover</h1>
         <div class="subtitle">Probabilistic Volume Screener</div>
       </div>
     </div>
