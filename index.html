@@ -33,9 +33,8 @@
   .logo{height:28px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:10px;padding:4px}
   .help-btn{appearance:none;border:1px solid var(--border);border-radius:999px;padding:8px 12px;background:#fff;cursor:pointer;font-size:14px;transition:box-shadow .15s,border-color .15s,background .15s}
   .help-btn:hover{border-color:#d1d5db;background:#fafafa;box-shadow:0 2px 6px rgba(0,0,0,0.06)}
-  .creator{color:var(--muted); font-size:13px; white-space:nowrap}
-
-  .sub{color:var(--muted);margin:6px 0 18px}
+  .creator { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .sub { color: var(--muted); margin: 6px 0 18px; }
 
   @media (max-width: 900px){
     header{flex-wrap:wrap}
@@ -232,7 +231,7 @@
 
       <div class="form-grid">
         <label for="fluid">Fluid</label>
-        <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option></select>
+        <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option><option value="oilgas">Oil + Solution Gas</option></select>
 
         <label for="iterations">Iterations</label>
         <input id="iterations" type="number" min="100" step="100" value="10000" />
@@ -345,9 +344,7 @@
 </div>
 
 
-  <!-- Scenario Builder (preserves layout) -->
-
-<!-- Help / User Manual Modal -->
+  <!-- Help / User Manual Modal -->
 <div id="helpModal" class="modal" aria-hidden="true" role="dialog" aria-label="User Manual">
   <div class="modal-content">
     <div class="modal-head">
@@ -468,15 +465,17 @@ const THICK_FACTORS = { m: 3.28084, ft: 1.0 };
 
 /* ===== Fluid configs ===== */
 function paramsFor(fluid){
-  return fluid==='gas'
-   ? [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true}]
-   : [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true}];
+  if(fluid==='gas')
+    return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true}];
+  if(fluid==='oilgas')
+    return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true},{name:"Rs",pos:true}];
+  return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true}];
 }
 function labelsFor(fluid){
   return fluid==='gas'
     ? { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
         cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
-        formula:'Formula (Gas): <code>GIIP = 43560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
+        formula:'Formula (Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
       }
     : { primary:"STOIIP", unit:"MMBO", xMain:"STOIIP (MMBO)", xRec:"Recoverable (MMBO)",
         cdfTitle:"STOIIP CDF", histTitle:"STOIIP Histogram", metricRec:"Recoverable STOIIP",
@@ -579,9 +578,12 @@ function addWeightsRow(afterEl, idPrefix){
   return div;
 }
 function mountParams(){
-  const host=document.getElementById('params'); host.innerHTML='';
+  console.log('mountParams called. PARAMS:', PARAMS);
+  const host=document.getElementById('params');
+  console.log('params container:', host);
+  host.innerHTML='';
   PARAMS.forEach(p=>{
-    const unit = p.name==="Bo" ? "(RB/STB)" : p.name==="Bg" ? "(scf/SCF)" : isFrac(p.name) ? "(fraction)" : "";
+    const unit = p.name==="Bo" ? "(RB/STB)" : p.name==="Bg" ? "(scf/SCF)" : p.name==="Rs" ? "(scf/bbl)" : isFrac(p.name) ? "(fraction)" : "";
     const row = document.createElement('div');
     row.className = 'dist-row';
     row.setAttribute('data-param', p.name);
@@ -694,20 +696,61 @@ function labelsAndFormula(){
   document.getElementById('metric-name-rec').textContent=L.metricRec;
   document.getElementById('formula-note').innerHTML=L.formula;
 }
+function mountResultsTypeSelector(){
+  const formGrid = document.querySelector('.form-grid');
+  // Remove any previous selector and label
+  let oldSel = document.getElementById('resultType');
+  if (oldSel) oldSel.remove();
+  let oldLabel = formGrid.querySelector('label[for="resultType"]');
+  if (oldLabel) oldLabel.remove();
+  // Only add for oilgas
+  if(FLUID.value==='oilgas'){
+    const label = document.createElement('label');
+    label.textContent = 'Results Metric';
+    label.setAttribute('for', 'resultType');
+    const sel = document.createElement('select');
+    sel.id = 'resultType';
+    sel.innerHTML = '<option value="stoiip">STOIIP (MMBO)</option><option value="giip">GIIP (bcf)</option><option value="total" selected>Total (MMBOE)</option>';
+    // Find thicknessUnit selector and its note
+    const thickUnit = document.getElementById('thicknessUnit');
+    let insertAfter = thickUnit;
+    // Find the note div after thicknessUnit
+    if (thickUnit) {
+      let next = thickUnit.nextElementSibling;
+      if (next && next.classList.contains('note')) {
+        insertAfter = next;
+      }
+    }
+    if (insertAfter && insertAfter.parentElement === formGrid) {
+      insertAfter.insertAdjacentElement('afterend', label);
+      label.insertAdjacentElement('afterend', sel);
+    } else {
+      formGrid.appendChild(label);
+      formGrid.appendChild(sel);
+    }
+    sel.addEventListener('change', runSimulation);
+  }
+}
 function updateFluidUI(){
   PARAMS=paramsFor(FLUID.value);
   mountParams();
   labelsAndFormula();
   prefillDefaults();
+  mountResultsTypeSelector();
   renderDistPreviewsDebounced();
 }
 FLUID.addEventListener('change', updateFluidUI);
 
 /* Defaults so it's runnable */
 function prefillDefaults(){
-  const D = (FLUID.value === 'gas')
-    ? {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"__RF":[0.5,0.05]}
-    : {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"__RF":[0.5,0.05]};
+  let D;
+  if(FLUID.value === 'gas') {
+    D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"__RF":[0.5,0.05]};
+  } else if(FLUID.value === 'oilgas') {
+    D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"Rs":[800,100],"__RF":[0.5,0.05]};
+  } else {
+    D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"__RF":[0.5,0.05]};
+  }
   document.querySelectorAll('#params .dist-row').forEach(row=>{
     const name=row.getAttribute('data-param');
     const pair=D[name]; const sel=row.querySelector('.dist-type'); sel.value='Normal';
@@ -929,366 +972,873 @@ function mostLikely(type,v,wPerc){
 }
 
 /* ===== Simulation ===== */
-function runSimulation(){
-  const err=document.getElementById('error'); err.textContent="";
-  const iters=parseInt(document.getElementById('iterations').value,10);
-  const nbins=Math.max(10, parseInt(document.getElementById('nbins').value,10)||100);
-  if(!(iters>0)){err.textContent="Iterations must be a positive number.";return;}
-  const rnd=seeded((document.getElementById('seed').value||"").trim());
-  const fluid=FLUID.value;
-
-  const rows=[...document.querySelectorAll('#params .dist-row')];
-  const dists=[];
-  for(const row of rows){
-    const name=row.getAttribute('data-param');
-    const type=row.querySelector('.dist-type').value;
-    const raw=[...row.querySelectorAll('input.v')].map(el=>el.value===""?NaN:Number(el.value));
-    if(type==='Triangular' && !(raw[0]<=raw[1] && raw[1]<=raw[2])){err.textContent=`Invalid Triangular values for ${name}.`;return;}
-    if(type==='PERT' && !(raw[0]<=raw[1] && raw[1]<=raw[2])){err.textContent=`Invalid PERT values for ${name}.`;return;}
-    if(type==='Uniform' && !(raw[0]<=raw[2])){err.textContent=`Invalid Uniform values for ${name}.`;return;}
-    if(type!=='Discrete'){
-      for(let j=0;j<3;j++){ if(Number.isNaN(raw[j]) && !DIST_LABELS[type][j].includes('(ignore)')){ err.textContent=`Please enter a valid number for ${name} (${DIST_LABELS[type][j]}).`; return; } }
+function runSimulation() {
+    console.log('runSimulation called');
+    const err = document.getElementById('error');
+    err.textContent = "";
+    const iters = parseInt(document.getElementById('iterations').value, 10);
+    const nbins = Math.max(10, parseInt(document.getElementById('nbins').value, 10) || 100);
+    if (!(iters > 0)) {
+        err.textContent = "Iterations must be a positive number.";
+        return;
     }
-    const conv=convTriplet(name, raw);
-    let wPerc=[NaN,NaN,NaN];
-    const wrow=row.nextElementSibling;
-    if(type==='Discrete' && wrow && wrow.classList.contains('weights-row')){
-      wPerc=[...wrow.querySelectorAll('input')].map(x=>Number(x.value));
+    const rnd = seeded((document.getElementById('seed').value || "").trim());
+    const fluid = FLUID.value;
+    const resultType = (fluid === 'oilgas' && document.getElementById('resultType')) ? document.getElementById('resultType').value : null;
+    console.log('fluid:', fluid, 'resultType:', resultType);
+    const rows = [...document.querySelectorAll('#params .dist-row')];
+    const dists = [];
+    for (const row of rows) {
+        const name = row.getAttribute('data-param');
+        const type = row.querySelector('.dist-type').value;
+        const raw = [...row.querySelectorAll('input.v')].map(el => el.value === "" ? NaN : Number(el.value));
+        if (type === 'Triangular' && !(raw[0] <= raw[1] && raw[1] <= raw[2])) {
+            err.textContent = `Invalid Triangular values for ${name}.`;
+            return;
+        }
+        if (type === 'PERT' && !(raw[0] <= raw[1] && raw[1] <= raw[2])) {
+            err.textContent = `Invalid PERT values for ${name}.`;
+            return;
+        }
+        if (type === 'Uniform' && !(raw[0] <= raw[2])) {
+            err.textContent = `Invalid Uniform values for ${name}.`;
+            return;
+        }
+        if (type !== 'Discrete') {
+            for (let j = 0; j < 3; j++) {
+                if (Number.isNaN(raw[j]) && !DIST_LABELS[type][j].includes('(ignore)')) {
+                    err.textContent = `Please enter a valid number for ${name} (${DIST_LABELS[type][j]}).`;
+                    return;
+                }
+            }
+        }
+        const conv = convTriplet(name, raw);
+        let wPerc = [NaN, NaN, NaN];
+        const wrow = row.nextElementSibling;
+        if (type === 'Discrete' && wrow && wrow.classList.contains('weights-row')) {
+            wPerc = [...wrow.querySelectorAll('input')].map(x => Number(x.value));
+        }
+        dists.push({name, type, raw: raw, v: conv, wPerc});
     }
-    dists.push({name,type,raw:raw, v:conv, wPerc});
-  }
 
-  // Recovery Factor
-  const rfType=document.querySelector('.rf-type').value;
-  const rfRaw=[...document.querySelectorAll('.rf-v')].map(x=>x.value===""?NaN:Number(x.value));
-  if(rfType==='Triangular' && !(rfRaw[0]<=rfRaw[1] && rfRaw[1]<=rfRaw[2])){err.textContent='Invalid Triangular values for RF.';return;}
-  if(rfType==='PERT' && !(rfRaw[0]<=rfRaw[1] && rfRaw[1]<=rfRaw[2])){err.textContent='Invalid PERT values for RF.';return;}
-  if(rfType==='Uniform' && !(rfRaw[0]<=rfRaw[2])){err.textContent='Invalid Uniform values for RF.';return;}
-  let rfPerc=[NaN,NaN,NaN];
-  if(rfType==='Discrete') rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x=>Number(x.value));
-
-  function drawOne(t,rawVals,valsConv,name,weightsPerc){
-    const {min,max}=boundsFor(name,fluid);
-    if(t==='Discrete'){
-      const {vals, weights} = discreteValsAndWeights(valsConv, weightsPerc);
-      if(vals.length===0){ return NaN; }
-      const u=rnd(); let acc=0;
-      for(let i=0;i<vals.length;i++){ acc+=weights[i]; if(u<=acc){ return Math.max(min, Math.min(max, vals[i])); } }
-      return Math.max(min, Math.min(max, vals[vals.length-1]));
-    }else if(t==='Triangular'){ return sampleTriangular(rnd,valsConv[0],valsConv[1],valsConv[2]); }
-    else if(t==='Uniform'){ return sampleUniform(rnd,valsConv[0],valsConv[2]); }
-    else if(t==='Normal'){ return sampleNormalTrunc(rnd, valsConv[0], valsConv[1], min, max); }
-    else if(t==='PERT'){ const x=samplePERT(rnd, valsConv[0], valsConv[1], valsConv[2], 4); return Math.max(min, Math.min(max, x)); }
-    else { const {mean,sigma}=normalFromP90P50P10(valsConv[0],valsConv[1],valsConv[2]); return sampleNormalTrunc(rnd, mean, sigma, min, max); }
-  }
-
-  const n=iters;
-  const A=new Float64Array(n),H=new Float64Array(n),NTG=new Float64Array(n),PHI=new Float64Array(n),SW=new Float64Array(n),FVF=new Float64Array(n),RF=new Float64Array(n);
-  for(let i=0;i<n;i++){
-    A[i]=drawOne(dists[0].type,dists[0].raw,dists[0].v,'Area',dists[0].wPerc);
-    H[i]=drawOne(dists[1].type,dists[1].raw,dists[1].v,'Thickness',dists[1].wPerc);
-    NTG[i]=drawOne(dists[2].type,dists[2].raw,dists[2].v,'Net to Gross',dists[2].wPerc);
-    PHI[i]=drawOne(dists[3].type,dists[3].raw,dists[3].v,'Porosity',dists[3].wPerc);
-    SW[i]=drawOne(dists[4].type,dists[4].raw,dists[4].v,'Water Saturation',dists[4].wPerc);
-    const fvfName=dists[5].name; FVF[i]=drawOne(dists[5].type,dists[5].raw,dists[5].v,fvfName,dists[5].wPerc);
-
-    if(rfType==='Discrete'){
-      const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
-      const u=rnd();
-      if(vals.length===0){ RF[i]=0; }
-      else{
-        let acc=0, pick=vals[vals.length-1];
-        for(let k=0;k<vals.length;k++){ acc+=weights[k]; if(u<=acc){ pick=vals[k]; break; } }
-        RF[i]=Math.max(0, Math.min(1, pick));
-      }
-    } else if(rfType==='Triangular'){ RF[i]=sampleTriangular(rnd,rfRaw[0],rfRaw[1],rfRaw[2]); }
-    else if(rfType==='Uniform'){ RF[i]=sampleUniform(rnd,rfRaw[0],rfRaw[2]); }
-    else if(rfType==='Normal'){ RF[i]=sampleNormalTrunc(rnd, rfRaw[0], rfRaw[1], 0, 1); }
-    else { const {mean,sigma}=normalFromP90P50P10(rfRaw[0],rfRaw[1],rfRaw[2]); RF[i]=sampleNormalTrunc(rnd, mean, sigma, 0, 1); }
-  }
-
-  // Volumes
-  const primary=new Float64Array(n), rec=new Float64Array(n);
-  const oil = (fluid!=='gas');
-  if(!oil){ for(let i=0;i<n;i++){ primary[i]=(43560*A[i]*H[i]*NTG[i]*PHI[i]*(1-SW[i])/FVF[i])/1e9; rec[i]=primary[i]*RF[i]; } }
-  else     { for(let i=0;i<n;i++){ primary[i]=(7758*A[i]*H[i]*NTG[i]*PHI[i]*(1-SW[i])/FVF[i])/1e6; rec[i]=primary[i]*RF[i]; } }
-
-  // Deterministic mid-case (most-likely) & percentile label
-  const detRaw={};
-  dists.forEach(d=>{
-    const b=boundsFor(d.name, fluid);
-    detRaw[d.name]=Math.max(b.min, Math.min(b.max, mostLikely(d.type, d.raw, d.wPerc)));
-  });
-  const detRF = Math.max(0, Math.min(1, mostLikely(rfType, rfRaw, rfPerc)));
-  let tornadoRows=[];
-
-  // Convert deterministic inputs to internal base units (Area->acres, Thickness->ft)
-  const detA   = (detRaw['Area']??NaN)      * AREA_FACTORS[AREA.value];
-  const detH   = (detRaw['Thickness']??NaN) * THICK_FACTORS[THICK.value];
-  const detNTG = detRaw['Net to Gross'];
-  const detPHI = detRaw['Porosity'];
-  const detSW  = detRaw['Water Saturation'];
-  const detFVF = (fluid==='gas') ? detRaw['Bg'] : detRaw['Bo'];
-
-  const detIn  = computeVol(fluid, detA, detH, detNTG, detPHI, detSW, detFVF);
-  const detRec = detIn*detRF;
-
-  // Percentiles + percentile of deterministic via ECDF
-  function quantiles(arr,qs=[0.1,0.5,0.9]){const s=Array.from(arr).sort((a,b)=>a-b),n=s.length,out=[];for(const q of qs){const pos=(n-1)*q,b=Math.floor(pos),t=pos-b;out.push(s[b+1]!==undefined? s[b]+t*(s[b+1]-s[b]):s[b]);}return out;}
-  const [P90,P50,P10]=quantiles(primary,[0.1,0.5,0.9]);
-  const [RP90,RP50,RP10]=quantiles(rec,[0.1,0.5,0.9]);
-
-  function ecdfY(sorted,x){let lo=0,hi=sorted.length-1; while(lo<=hi){const m=(lo+hi)>>1; if(sorted[m]<=x) lo=m+1; else hi=m-1;} return lo/sorted.length;}
-  const sIn=Array.from(primary).sort((a,b)=>a-b), sRec=Array.from(rec).sort((a,b)=>a-b);
-  const yDetIn=ecdfY(sIn,detIn), yDetRec=ecdfY(sRec,detRec);
-  const pLab = y => `P${Math.max(0, Math.min(100, 100 - Math.round(y*100)))}`;
-
-  // Table
-  const L=labelsFor(fluid);
-  const fmt=x=> (Math.abs(x)>=100) ? x.toFixed(0) : x.toFixed(2);
-  document.querySelector('.s-p90').textContent=fmt(P90);
-  document.querySelector('.s-p50').textContent=fmt(P50);
-  document.querySelector('.s-p10').textContent=fmt(P10);
-  document.querySelector('.s-mid').textContent = `${fmt(detIn)} (${pLab(yDetIn)})`;
-  document.querySelector('.r-p90').textContent=fmt(RP90);
-  document.querySelector('.r-p50').textContent=fmt(RP50);
-  document.querySelector('.r-p10').textContent=fmt(RP10);
-  document.querySelector('.r-mid').textContent = `${fmt(detRec)} (${pLab(yDetRec)})`;
-  document.querySelectorAll('#summary td').forEach(td=>td.classList.remove('muted'));
-  document.getElementById('formula-note').innerHTML=L.formula;
-
-  // ===== Charts =====
-  const config={displayModeBar:true,responsive:true,toImageButtonOptions:{format:'png',filename:'rangerover',width:1600,height:1000,scale:3}};
-  function baseLayout(title,x,y){return{
-    autosize:true, title:{text:title,font:{size:19,color:"#111827"},x:0.02,xanchor:'left'},
-    paper_bgcolor:'#fff',plot_bgcolor:'#fff',
-    margin:{t:86,l:90,r:46,b:96},
-    xaxis:{title:x,gridcolor:"#EFEFEF",color:"#374151",ticks:'outside',ticklen:6,tickwidth:1,tickcolor:'#e5e7eb',titlefont:{size:15},tickfont:{size:13}},
-    yaxis:{title:y,gridcolor:"#EFEFEF",color:"#374151",ticks:'outside',ticklen:6,tickwidth:1,tickcolor:'#e5e7eb',titlefont:{size:15},tickfont:{size:13}, fixedrange:true},
-    hoverlabel:{font:{size:12}},
-    showlegend:false
-  };}
-
-  // CDF helper
-  function cdf(arr){const s=Array.from(arr).sort((a,b)=>a-b), y=s.map((_,i)=>(i+1)/s.length);return {x:s,y};}
-  const cMain=cdf(primary), cRec=cdf(rec);
-
-  // In-place CDF with percentile markers + deterministic
-  Plotly.newPlot('cdf-main',[
-    {x:cMain.x,y:cMain.y,mode:'lines',line:{width:3,color:'var(--blue)'}},
-    {x:[P90,P50,P10], y:[0.1,0.5,0.9], mode:'markers+text',
-      marker:{size:10,color:'#ED1C24',symbol:'circle'},
-      text:[`P90=${fmt(P90)}`,`P50=${fmt(P50)}`,`P10=${fmt(P10)}`],
-      textposition:['right center','left center','right center'], textfont:{size:12}, hoverinfo:'skip'},
-    {x:[detIn], y:[yDetIn], mode:'markers+text',
-      marker:{size:12,color:'var(--mid)',symbol:'diamond'},
-      text:[`Det. Mid Case=${fmt(detIn)} (${pLab(yDetIn)})`], textposition:'top right', textfont:{size:12}, hoverinfo:'skip'}
-  ], baseLayout(L.cdfTitle, L.xMain, 'Cumulative Probability'), config);
-
-  // Hist helper (keep verticals + mid)
-  const vLines=xs=>xs.map(x=>({type:'line',x0:x,x1:x,y0:0,y1:1,yref:'paper',line:{dash:'dot',width:3,color:'#ED1C24'}}));
-  const midLine=x=>({type:'line',x0:x,x1:x,y0:0,y1:1,yref:'paper',line:{dash:'dot',width:3,color:'var(--mid)'}});
-  function histogram(arr,tgt,title,xlabel,marks,mid){
-    const trace={x:Array.from(arr),type:'histogram',nbinsx:nbins,
-      marker:{color:'var(--blue-light)',line:{width:0.8,color:'var(--blue-stroke)'}}};
-    Plotly.newPlot(tgt,[trace],baseLayout(title,xlabel,'Frequency'),config)
-      .then(gd=>Plotly.relayout(gd,{shapes:[...vLines(marks), midLine(mid)]}));
-  }
-  histogram(primary,'hist-main',L.histTitle,L.xMain,[P90,P50,P10],detIn);
-
-  // Recoverable CDF
-  Plotly.newPlot('cdf-rec',[
-    {x:cRec.x,y:cRec.y,mode:'lines',line:{width:3,color:'var(--blue)'}},
-    {x:[RP90,RP50,RP10], y:[0.1,0.5,0.9], mode:'markers+text',
-      marker:{size:10,color:'#ED1C24',symbol:'circle'},
-      text:[`P90=${fmt(RP90)}`,`P50=${fmt(RP50)}`,`P10=${fmt(RP10)}`],
-      textposition:['right center','left center','right center'], textfont:{size:12}, hoverinfo:'skip'},
-    {x:[detRec], y:[yDetRec], mode:'markers+text',
-      marker:{size:12,color:'var(--mid)',symbol:'diamond'},
-      text:[`Det. Mid Case=${fmt(detRec)} (${pLab(yDetRec)})`], textposition:'top right', textfont:{size:12}, hoverinfo:'skip'}
-  ], baseLayout(L.cdfTitle+' (Recoverable)', L.xRec, 'Cumulative Probability'), config);
-
-  histogram(rec,'hist-rec',L.histTitle+' (Recoverable)',L.xRec,[RP90,RP50,RP10],detRec);
-
-
-
-  /* ---- Tornado (unit-aware; TRUE deltas; sorted; explicit X labels) ---- */
-  // Base values correspond to the Deterministic Mid Case (means/weighted means) — USE WEIGHT‑AWARE detRaw
-  const baseVals = [detA, detH, detNTG, detPHI, detSW, detFVF];
-  const baseVol = computeVol(fluid, baseVals[0],baseVals[1],baseVals[2],baseVals[3],baseVals[4],baseVals[5]);
-
-  const names=[], lows=[], highs=[], spans=[];
-  dists.forEach((d,idx)=>{
-    const conv = convTriplet(d.name, d.raw.slice());
-    let {low,high} = lowHighFrom(d.type, conv);
-    const b = boundsFor(d.name,fluid);
-    low = Math.max(b.min, Math.min(b.max, low));
-    high = Math.max(b.min, Math.min(b.max, high));
-    const vLo = baseVals.slice(), vHi = baseVals.slice();
-    vLo[idx] = low; vHi[idx] = high;
-    const volLo = computeVol(fluid, vLo[0],vLo[1],vLo[2],vLo[3],vLo[4],vLo[5]);
-    const volHi = computeVol(fluid, vHi[0],vHi[1],vHi[2],vHi[3],vHi[4],vHi[5]);
-    names.push(d.name);
-    lows.push(volLo - baseVol);
-    highs.push(volHi - baseVol);
-    spans.push(Math.max(Math.abs(volLo-baseVol), Math.abs(volHi-baseVol)));
-  });
-
-  const order=[...names.keys()].sort((a,b)=>spans[b]-spans[a]);
-  const y=order.map(i=>names[i]);
-  const xLow=order.map(i=>lows[i]);
-  const xHigh=order.map(i=>highs[i]);
-
-  const cs = getComputedStyle(document.documentElement);
-  const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
-  const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
-  const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-  const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-
-  renderTornadoQC(tornadoRows);
-
-  // Helper: render QC table of Base/Low/High inputs used in Tornado
-  function renderTornadoQC(rows){
-    try{
-      const el = document.getElementById('tornado-qc');
-      if(!el) return;
-      if(!rows || rows.length===0){ el.textContent=''; return; }
-      let html = '<table style="border-collapse:collapse; width:100%; margin-top:4px;">';
-      html += '<tr><th style="text-align:left;border-bottom:1px solid #eee;padding:2px 4px;">Param</th>'+
-              '<th style="text-align:right;border-bottom:1px solid #eee;padding:2px 4px;">Base</th>'+
-              '<th style="text-align:right;border-bottom:1px solid #eee;padding:2px 4px;">Low</th>'+
-              '<th style="text-align:right;border-bottom:1px solid #eee;padding:2px 4px;">High</th></tr>';
-      rows.forEach(r=>{
-        html += `<tr>
-          <td style="padding:2px 4px;">${r.name}</td>
-          <td style="padding:2px 4px; text-align:right;">${r.base}</td>
-          <td style="padding:2px 4px; text-align:right;">${r.low}</td>
-          <td style="padding:2px 4px; text-align:right;">${r.high}</td>
-        </tr>`;
-      });
-      html += '</table>';
-      el.innerHTML = html;
-    }catch(e){ console.warn('QC table render error', e); }
-  }
-Plotly.newPlot('tornado',[
-    {type:'bar',orientation:'h',y:y,x:xLow,marker:{color:colorsLow},width:0.6,
-     name:'Δ at Low (vs Det. Mid Case)', hovertemplate:'%{y}<br>Δ at Low: %{x:.2f} '+L.unit+'<extra></extra>'},
-    {type:'bar',orientation:'h',y:y,x:xHigh,marker:{color:colorsHigh},width:0.6,
-     name:'Δ at High (vs Det. Mid Case)', hovertemplate:'%{y}<br>Δ at High: %{x:.2f} '+L.unit+'<extra></extra>'}
-  ],{
-    autosize:true, showlegend:false,
-    legend:{orientation:'h', x:0.02, y:1.08},
-    title:{text:'Sensitivity (Tornado) — '+L.primary+'  (relative to Deterministic Mid Case)',font:{size:19,color:"#111827"},x:0.02,xanchor:'left'},
-    barmode:'overlay',
-    margin:{t:86,l:220,r:46,b:110},
-    xaxis:{
-      title:'Change in '+L.primary+' ('+L.unit+')',
-      gridcolor:"#EFEFEF",
-      zeroline:true, zerolinewidth:1, zerolinecolor:'#9CA3AF',
-      showticklabels:true,
-      ticks:'outside',
-      ticklen:6, tickwidth:1, tickcolor:'#e5e7eb',
-      tickformat:'.2f'
-    },
-    yaxis:{title:'',automargin:true,categoryorder:'array',categoryarray:y,autorange:'reversed'},
-    paper_bgcolor:'#fff',plot_bgcolor:'#fff'
-  }, config);
-
-  // CSV export
-  document.getElementById('downloadCsv').disabled=false;
-  document.getElementById('downloadSamples').disabled=false;
-  document.getElementById('downloadCsv').onclick=()=>downloadSummaryCSV(FLUID.value, L, {P90,P50,P10,RP90,RP50,RP10,detIn,detRec,yDetIn,yDetRec,fmt});
-  lastSim={unit:L.unit,n,primary,rec,fluid,inputs:{A,H,NTG,PHI,SW,FVF,RF}};
-  document.getElementById('downloadSamples').onclick=downloadSamplesCSV;
-
-  wireSyncedZoom();
-
-
-  // Sync X across the four result plots
-  wireSyncedZoom();
-
-
-  // Sync X across the four result plots
-  wireSyncedZoom();
-}
-
-/* ===== CSV ===== */
-function downloadSummaryCSV(fluid, L, extras){
-  const {P90,P50,P10,RP90,RP50,RP10,detIn,detRec,yDetIn,yDetRec,fmt}=extras;
-  const pLab = y => `P${Math.max(0, Math.min(100, 100 - Math.round(y*100)))}`;
-  const lines=[];
-  lines.push('Section,Field,Key,Value');
-  lines.push(`Meta,Fluid,,${FLUID.value}`);
-  lines.push(`Meta,Iterations,,${document.getElementById('iterations').value}`);
-  lines.push(`Meta,Seed,,${(document.getElementById('seed').value||"").trim()}`);
-  lines.push(`Meta,Histogram bins,,${document.getElementById('nbins').value}`);
-  lines.push(`Units,Area,,${document.getElementById('areaUnit').value}`);
-  lines.push(`Units,Thickness,,${document.getElementById('thicknessUnit').value}`);
-  [...document.querySelectorAll('#params .dist-row')].forEach(row=>{
-    const name=row.getAttribute('data-param');
-    const type=row.querySelector('.dist-type').value;
-    const v=[...row.querySelectorAll('input.v')].map(x=>x.value);
-    lines.push(`Param,${name},Distribution,${type}`);
-    lines.push(`Param,${name},V0,${v[0]||''}`); lines.push(`Param,${name},V1,${v[1]||''}`); lines.push(`Param,${name},V2,${v[2]||''}`);
-    if(type==='Discrete'){
-      const wrow=row.nextElementSibling;
-      const ws=wrow?[...wrow.querySelectorAll('input')].map(x=>x.value):['','',''];
-      lines.push(`Param,${name},Weight1(%),${ws[0]}`); lines.push(`Param,${name},Weight2(%),${ws[1]}`); lines.push(`Param,${name},Weight3(%),${ws[2]}`);
+    // Recovery Factor
+    const rfType = document.querySelector('.rf-type').value;
+    const rfRaw = [...document.querySelectorAll('.rf-v')].map(x => x.value === "" ? NaN : Number(x.value));
+    if (rfType === 'Triangular' && !(rfRaw[0] <= rfRaw[1] && rfRaw[1] <= rfRaw[2])) {
+        err.textContent = 'Invalid Triangular values for RF.';
+        return;
     }
-  });
-  const rfType=document.querySelector('.rf-type').value;
-  const rfV=[...document.querySelectorAll('.rf-v')].map(x=>x.value);
-  lines.push(`Param,Recovery Factor,Distribution,${rfType}`);
-  lines.push(`Param,Recovery Factor,V0,${rfV[0]||''}`);
-  lines.push(`Param,Recovery Factor,V1,${rfV[1]||''}`);
-  lines.push(`Param,Recovery Factor,V2,${rfV[2]||''}`);
-  if(rfType==='Discrete'){
-    const ws=[...document.querySelectorAll('#rf-weights input')].map(x=>x.value);
-    lines.push(`Param,Recovery Factor,Weight1(%),${ws[0]||''}`);
-    lines.push(`Param,Recovery Factor,Weight2(%),${ws[1]||''}`);
-    lines.push(`Param,Recovery Factor,Weight3(%),${ws[2]||''}`);
-  }
-  lines.push(`Result,${L.primary},P90,${fmt(P90)} ${L.unit}`);
-  lines.push(`Result,${L.primary},P50,${fmt(P50)} ${L.unit}`);
-  lines.push(`Result,${L.primary},P10,${fmt(P10)} ${L.unit}`);
-  lines.push(`Result,${L.primary},Deterministic,${fmt(detIn)} ${L.unit} (${pLab(yDetIn)})`);
-  lines.push(`Result,${L.metricRec},P90,${fmt(RP90)} ${L.unit}`);
-  lines.push(`Result,${L.metricRec},P50,${fmt(RP50)} ${L.unit}`);
-  lines.push(`Result,${L.metricRec},P10,${fmt(RP10)} ${L.unit}`);
-  lines.push(`Result,${L.metricRec},Deterministic,${fmt(detRec)} ${L.unit} (${pLab(yDetRec)})`);
-  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  a.href=url; a.download='volumetrics_summary.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-}
-function downloadSamplesCSV(){
-  if(!lastSim) return;
-  const {unit,n,primary,rec,fluid,inputs} = lastSim;
-  const {A,H,NTG,PHI,SW,FVF,RF} = inputs || {};
-  const fvfLabel = (fluid==='gas') ? 'Bg (scf/SCF)' : 'Bo (RB/STB)';
-  const header=['Iter','In-Place('+unit+')','Recoverable('+unit+')','Area (acres)','Thickness (ft)','NtG (frac)','Porosity (frac)','Sw (frac)', fvfLabel, 'RF (frac)'];
-  const lines=[header.join(',')];
-  for(let i=0;i<n;i++){
-    const row=[
-      i+1,
-      primary[i],
-      rec[i],
-      A ? A[i] : '',
-      H ? H[i] : '',
-      NTG ? NTG[i] : '',
-      PHI ? PHI[i] : '',
-      SW ? SW[i] : '',
-      FVF ? FVF[i] : '',
-      RF ? RF[i] : ''
-    ];
-    lines.push(row.join(','));
-  }
-  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  a.href=url; a.download='volumetrics_samples.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-}
+    if (rfType === 'PERT' && !(rfRaw[0] <= rfRaw[1] && rfRaw[1] <= rfRaw[2])) {
+        err.textContent = 'Invalid PERT values for RF.';
+        return;
+    }
+    if (rfType === 'Uniform' && !(rfRaw[0] <= rfRaw[2])) {
+        err.textContent = 'Invalid Uniform values for RF.';
+        return;
+    }
+    let rfPerc = [NaN, NaN, NaN];
+    if (rfType === 'Discrete') rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x => Number(x.value));
 
+    function drawOne(t, rawVals, valsConv, name, weightsPerc) {
+        const {min, max} = boundsFor(name, fluid);
+        if (t === 'Discrete') {
+            const {vals, weights} = discreteValsAndWeights(valsConv, weightsPerc);
+            if (vals.length === 0) {
+                return NaN;
+            }
+            const u = rnd();
+            let acc = 0;
+            for (let i = 0; i < vals.length; i++) {
+                acc += weights[i];
+                if (u <= acc) {
+                    return Math.max(min, Math.min(max, vals[i]));
+                }
+            }
+            return Math.max(min, Math.min(max, vals[vals.length - 1]));
+        } else if (t === 'Triangular') {
+            return sampleTriangular(rnd, valsConv[0], valsConv[1], valsConv[2]);
+        } else if (t === 'Uniform') {
+            return sampleUniform(rnd, valsConv[0], valsConv[2]);
+        } else if (t === 'Normal') {
+            return sampleNormalTrunc(rnd, valsConv[0], valsConv[1], min, max);
+        } else if (t === 'PERT') {
+            const x = samplePERT(rnd, valsConv[0], valsConv[1], valsConv[2], 4);
+            return Math.max(min, Math.min(max, x));
+        } else {
+            const {mean, sigma} = normalFromP90P50P10(valsConv[0], valsConv[1], valsConv[2]);
+            return sampleNormalTrunc(rnd, mean, sigma, min, max);
+        }
+    }
+
+    const n = iters;
+    let A, H, NTG, PHI, SW, Bo, Bg, Rs, RF;
+    // Calculate deterministic base values for tornado and mid-case
+    let detA, detH, detNTG, detPHI, detSW, detFVF;
+    detA = mostLikely(dists[0].type, dists[0].v, dists[0].wPerc);
+    detH = mostLikely(dists[1].type, dists[1].v, dists[1].wPerc);
+    detNTG = mostLikely(dists[2].type, dists[2].v, dists[2].wPerc);
+    detPHI = mostLikely(dists[3].type, dists[3].v, dists[3].wPerc);
+    detSW = mostLikely(dists[4].type, dists[4].v, dists[4].wPerc);
+    detFVF = mostLikely(dists[5].type, dists[5].v, dists[5].wPerc);
+
+    // Simulation logic for 'oil', 'gas', and 'oilgas' fluid types
+    if (fluid === 'oilgas') {
+        A = new Float64Array(n);
+        H = new Float64Array(n);
+        NTG = new Float64Array(n);
+        PHI = new Float64Array(n);
+        SW = new Float64Array(n);
+        Bo = new Float64Array(n);
+        Rs = new Float64Array(n);
+        RF = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+            A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
+            H[i] = drawOne(dists[1].type, dists[1].raw, dists[1].v, 'Thickness', dists[1].wPerc);
+            NTG[i] = drawOne(dists[2].type, dists[2].raw, dists[2].v, 'Net to Gross', dists[2].wPerc);
+            PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
+            SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
+            Bo[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bo', dists[5].wPerc);
+            Rs[i] = drawOne(dists[6].type, dists[6].raw, dists[6].v, 'Rs', dists[6].wPerc);
+            // Recovery Factor sampling (same as before)
+            if (rfType === 'Discrete') {
+                const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
+                const u = rnd();
+                if (vals.length === 0) {
+                    RF[i] = 0;
+                } else {
+                    let acc = 0, pick = vals[vals.length - 1];
+                    for (let k = 0; k < vals.length; k++) {
+                        acc += weights[k];
+                        if (u <= acc) {
+                            pick = vals[k];
+                            break;
+                        }
+                    }
+                    RF[i] = Math.max(0, Math.min(1, pick));
+                }
+            } else if (rfType === 'Triangular') {
+                RF[i] = sampleTriangular(rnd, rfRaw[0], rfRaw[1], rfRaw[2]);
+            } else if (rfType === 'Uniform') {
+                RF[i] = sampleUniform(rnd, rfRaw[0], rfRaw[2]);
+            } else if (rfType === 'Normal') {
+                RF[i] = sampleNormalTrunc(rnd, rfRaw[0], rfRaw[1], 0, 1);
+            } else {
+                const {mean, sigma} = normalFromP90P50P10(rfRaw[0], rfRaw[1], rfRaw[2]);
+                RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
+            }
+        }
+        console.log('Finished sampling all inputs for oilgas');
+        let stoiip = new Float64Array(n);
+        let giip = new Float64Array(n);
+        let totalMMBOE = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+            stoiip[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
+            giip[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e6;
+            totalMMBOE[i] = stoiip[i] + giip[i];
+        }
+        let metric = resultType || 'total';
+        let primary, rec, labelSet;
+        if (metric === 'stoiip') {
+            primary = stoiip;
+            rec = stoiip.map((v, i) => v * RF[i]);
+            labelSet = {
+                primary: 'STOIIP', unit: 'MMBO', xMain: 'STOIIP (MMBO)', xRec: 'Recoverable (MMBO)',
+                cdfTitle: 'STOIIP CDF', histTitle: 'STOIIP Histogram', metricRec: 'Recoverable STOIIP',
+                formula: 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
+            };
+        } else if (metric === 'giip') {
+            primary = giip;
+            rec = giip.map((v, i) => v * RF[i]);
+            labelSet = {
+                primary: 'GIIP', unit: 'BCF', xMain: 'GIIP (BCF)', xRec: 'Recoverable (BCF)',
+                cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
+                formula: 'Formula (Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / (Bo × 5.8)</code> (SCF; plots in BCF).'
+            };
+        } else {
+            primary = totalMMBOE;
+            rec = totalMMBOE.map((v, i) => v * RF[i]);
+            labelSet = {
+                primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total MMBOE', xRec: 'Recoverable (MMBOE)',
+                cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
+                formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
+            };
+        }
+        console.log('Selected metric:', metric);
+        // Table
+        const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+        const quantiles = arr => {
+            const s = Array.from(arr).sort((a, b) => a - b), n = s.length;
+            return [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]];
+        };
+        const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
+        console.log('Quantiles:', {P90, P50, P10, RP90, RP50, RP10});
+        document.querySelector('.s-p90').textContent = fmt(P90);
+        document.querySelector('.s-p50').textContent = fmt(P50);
+        document.querySelector('.s-p10').textContent = fmt(P10);
+        document.querySelector('.s-mid').textContent = fmt(primary[Math.floor(n / 2)]);
+        document.querySelector('.r-p90').textContent = fmt(RP90);
+        document.querySelector('.r-p50').textContent = fmt(RP50);
+        document.querySelector('.r-p10').textContent = fmt(RP10);
+        document.querySelector('.r-mid').textContent = fmt(rec[Math.floor(n / 2)]);
+        document.getElementById('results-title').innerHTML = `Results (${labelSet.unit}) <span class=\"chip\">P90 / P50 / P10</span>`;
+        document.getElementById('metric-name').textContent = labelSet.primary;
+        document.getElementById('metric-name-rec').textContent = labelSet.metricRec;
+        document.getElementById('formula-note').innerHTML = labelSet.formula;
+        console.log('Updated summary table and labels');
+        // Plots
+        const config = {
+            displayModeBar: true,
+            responsive: true,
+            toImageButtonOptions: {format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3}
+        };
+        function baseLayout(title, x, y) {
+            return {
+                autosize: true,
+                title: {text: title, font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
+                paper_bgcolor: '#fff',
+                plot_bgcolor: '#fff',
+                margin: {t: 86, l: 90, r: 46, b: 110},
+                xaxis: {
+                    title: x,
+                    gridcolor: "#EFEFEF",
+                    color: "#374151",
+                    ticks: 'outside',
+                    ticklen: 6,
+                    tickwidth: 1,
+                    tickcolor: '#e5e7eb',
+                    titlefont: {size: 15},
+                    tickfont: {size: 13}
+                },
+                yaxis: {
+                    title: y,
+                    gridcolor: "#EFEFEF",
+                    color: "#374151",
+                    ticks: 'outside',
+                    ticklen: 6,
+                    tickwidth: 1,
+                    tickcolor: '#e5e7eb',
+                    titlefont: {size: 15},
+                    tickfont: {size: 13},
+                    fixedrange: true
+                },
+                hoverlabel: {font: {size: 12}},
+                showlegend: false
+            };
+        }
+        function cdf(arr) {
+            const s = Array.from(arr).sort((a, b) => a - b), y = s.map((_, i) => (i + 1) / s.length);
+            return {x: s, y};
+        }
+        const cMain = cdf(primary), cRec = cdf(rec);
+        console.log('Preparing to plot CDF and histogram');
+        Plotly.newPlot('cdf-main', [
+            {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+            {
+                x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
+                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+            },
+            {
+                x: [primary[Math.floor(n / 2)]],
+                y: [cMain.y[Math.floor(n / 2)]],
+                mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(primary[Math.floor(n / 2)])}`],
+                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+            }
+        ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
+        console.log('Plotted cdf-main');
+        // Histogram
+        const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
+        const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
+        function histogram(arr, tgt, title, xlabel, marks, mid) {
+            const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
+            Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency'), config)
+                .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
+        }
+        histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
+        console.log('Plotted hist-main');
+        Plotly.newPlot('cdf-rec', [
+            {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+            {
+                x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
+                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+            },
+            {
+                x: [rec[Math.floor(n / 2)]],
+                y: [cRec.y[Math.floor(n / 2)]],
+                mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(rec[Math.floor(n / 2)])}`],
+                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+            }
+        ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
+        console.log('Plotted cdf-rec');
+        histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
+        console.log('Plotted hist-rec');
+        // Tornado chart
+        // Use deterministic mid-case for tornado
+        let detStoiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) / detFVF) / 1e6;
+        let detGiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc) / detFVF) / 5.8e6;
+        let detTotal = detStoiip + detGiip;
+        let baseVol = metric === 'stoiip' ? detStoiip : metric === 'giip' ? detGiip : detTotal;
+        const names = [], lows = [], highs = [], spans = [];
+        dists.forEach((d, idx) => {
+            const conv = convTriplet(d.name, d.raw.slice());
+            let {low, high} = lowHighFrom(d.type, conv);
+            const b = boundsFor(d.name, fluid);
+            low = Math.max(b.min, Math.min(b.max, low));
+            high = Math.max(b.min, Math.min(b.max, high));
+            const vLo = [detA, detH, detNTG, detPHI, detSW, detFVF, mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)];
+            const vHi = vLo.slice();
+            vLo[idx] = low;
+            vHi[idx] = high;
+            let volLo, volHi;
+            if (metric === 'stoiip') {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6;
+            } else if (metric === 'giip') {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
+            } else {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6 + (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6 + (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
+            }
+            names.push(d.name);
+            lows.push(volLo - baseVol);
+            highs.push(volHi - baseVol);
+            spans.push(Math.max(Math.abs(volLo - baseVol), Math.abs(volHi - baseVol)));
+        });
+        const order = [...names.keys()].sort((a, b) => spans[b] - spans[a]);
+        const y = order.map(i => names[i]);
+        const xLow = order.map(i => lows[i]);
+        const xHigh = order.map(i => highs[i]);
+        const cs = getComputedStyle(document.documentElement);
+        const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
+        const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
+        const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+        const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+        Plotly.newPlot('tornado', [
+            {type: 'bar', orientation: 'h', y: y, x: xLow, marker: {color: colorsLow}, width: 0.6, name: 'Δ at Low (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at Low: %{x:.2f} ' + labelSet.unit + '<extra></extra>'},
+            {type: 'bar', orientation: 'h', y: y, x: xHigh, marker: {color: colorsHigh}, width: 0.6, name: 'Δ at High (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at High: %{x:.2f} ' + labelSet.unit + '<extra></extra>'}
+        ], {
+            autosize: true, showlegend: false,
+            legend: {orientation: 'h', x: 0.02, y: 1.08},
+            title: {text: 'Sensitivity (Tornado) — ' + labelSet.primary + '  (relative to Deterministic Mid Case)', font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
+            barmode: 'overlay',
+            margin: {t: 86, l: 220, r: 46, b: 110},
+            xaxis: {title: 'Change in ' + labelSet.primary + ' (' + labelSet.unit + ')', gridcolor: "#EFEFEF", zeroline: true, zerolinewidth: 1, zerolinecolor: '#9CA3AF', showticklabels: true, ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', tickformat: '.2f'},
+            yaxis: {title: '', automargin: true, categoryorder: 'array', categoryarray: y, autorange: 'reversed'},
+            paper_bgcolor: '#fff', plot_bgcolor: '#fff'
+        }, config);
+        document.getElementById('downloadCsv').disabled = false;
+        document.getElementById('downloadSamples').disabled = false;
+        document.getElementById('downloadCsv').onclick = () => downloadSummaryCSV(FLUID.value, labelSet, {P90, P50, P10, RP90, RP50, RP10, detIn: primary[Math.floor(n / 2)], detRec: rec[Math.floor(n / 2)], yDetIn: cMain.y[Math.floor(n / 2)], yDetRec: cRec.y[Math.floor(n / 2)], fmt});
+        lastSim = {unit: labelSet.unit, n, primary, rec, fluid, inputs: {A, H, NTG, PHI, SW, Bo, Rs, RF}};
+        document.getElementById('downloadSamples').onclick = downloadSamplesCSV;
+        wireSyncedZoom();
+        wireSyncedZoom();
+        console.log('Completed oilgas simulation block');
+        return;
+    } else if (fluid === 'oil') {
+        A = new Float64Array(n);
+        H = new Float64Array(n);
+        NTG = new Float64Array(n);
+        PHI = new Float64Array(n);
+        SW = new Float64Array(n);
+        Bo = new Float64Array(n);
+        RF = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+            A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
+            H[i] = drawOne(dists[1].type, dists[1].raw, dists[1].v, 'Thickness', dists[1].wPerc);
+            NTG[i] = drawOne(dists[2].type, dists[2].raw, dists[2].v, 'Net to Gross', dists[2].wPerc);
+            PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
+            SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
+            Bo[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bo', dists[5].wPerc);
+            // Recovery Factor sampling (same as before)
+            if (rfType === 'Discrete') {
+                const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
+                const u = rnd();
+                if (vals.length === 0) {
+                    RF[i] = 0;
+                } else {
+                    let acc = 0, pick = vals[vals.length - 1];
+                    for (let k = 0; k < vals.length; k++) {
+                        acc += weights[k];
+                        if (u <= acc) {
+                            pick = vals[k];
+                            break;
+                        }
+                    }
+                    RF[i] = Math.max(0, Math.min(1, pick));
+                }
+            } else if (rfType === 'Triangular') {
+                RF[i] = sampleTriangular(rnd, rfRaw[0], rfRaw[1], rfRaw[2]);
+            } else if (rfType === 'Uniform') {
+                RF[i] = sampleUniform(rnd, rfRaw[0], rfRaw[2]);
+            } else if (rfType === 'Normal') {
+                RF[i] = sampleNormalTrunc(rnd, rfRaw[0], rfRaw[1], 0, 1);
+            } else {
+                const {mean, sigma} = normalFromP90P50P10(rfRaw[0], rfRaw[1], rfRaw[2]);
+                RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
+            }
+        }
+        console.log('Finished sampling all inputs for oil');
+        let stoiip = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+            stoiip[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
+        }
+        let metric = resultType || 'total';
+        let primary, rec, labelSet;
+        if (metric === 'stoiip') {
+            primary = stoiip;
+            rec = stoiip.map((v, i) => v * RF[i]);
+            labelSet = {
+                primary: 'STOIIP', unit: 'MMBO', xMain: 'STOIIP (MMBO)', xRec: 'Recoverable (MMBO)',
+                cdfTitle: 'STOIIP CDF', histTitle: 'STOIIP Histogram', metricRec: 'Recoverable STOIIP',
+                formula: 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
+            };
+        } else {
+            primary = stoiip;
+            rec = stoiip.map((v, i) => v * RF[i]);
+            labelSet = {
+                primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total MMBOE', xRec: 'Recoverable (MMBOE)',
+                cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
+                formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
+            };
+        }
+        console.log('Selected metric:', metric);
+        // Table
+        const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+        const quantiles = arr => {
+            const s = Array.from(arr).sort((a, b) => a - b), n = s.length;
+            return [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]];
+        };
+        const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
+        console.log('Quantiles:', {P90, P50, P10, RP90, RP50, RP10});
+        document.querySelector('.s-p90').textContent = fmt(P90);
+        document.querySelector('.s-p50').textContent = fmt(P50);
+        document.querySelector('.s-p10').textContent = fmt(P10);
+        document.querySelector('.s-mid').textContent = fmt(primary[Math.floor(n / 2)]);
+        document.querySelector('.r-p90').textContent = fmt(RP90);
+        document.querySelector('.r-p50').textContent = fmt(RP50);
+        document.querySelector('.r-p10').textContent = fmt(RP10);
+        document.querySelector('.r-mid').textContent = fmt(rec[Math.floor(n / 2)]);
+        document.getElementById('results-title').innerHTML = `Results (${labelSet.unit}) <span class=\"chip\">P90 / P50 / P10</span>`;
+        document.getElementById('metric-name').textContent = labelSet.primary;
+        document.getElementById('metric-name-rec').textContent = labelSet.metricRec;
+        document.getElementById('formula-note').innerHTML = labelSet.formula;
+        console.log('Updated summary table and labels');
+        // Plots
+        const config = {
+            displayModeBar: true,
+            responsive: true,
+            toImageButtonOptions: {format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3}
+        };
+        function baseLayout(title, x, y) {
+            return {
+                autosize: true,
+                title: {text: title, font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
+                paper_bgcolor: '#fff',
+                plot_bgcolor: '#fff',
+                margin: {t: 86, l: 90, r: 46, b: 110},
+                xaxis: {
+                    title: x,
+                    gridcolor: "#EFEFEF",
+                    color: "#374151",
+                    ticks: 'outside',
+                    ticklen: 6,
+                    tickwidth: 1,
+                    tickcolor: '#e5e7eb',
+                    titlefont: {size: 15},
+                    tickfont: {size: 13}
+                },
+                yaxis: {
+                    title: y,
+                    gridcolor: "#EFEFEF",
+                    color: "#374151",
+                    ticks: 'outside',
+                    ticklen: 6,
+                    tickwidth: 1,
+                    tickcolor: '#e5e7eb',
+                    titlefont: {size: 15},
+                    tickfont: {size: 13},
+                    fixedrange: true
+                },
+                hoverlabel: {font: {size: 12}},
+                showlegend: false
+            };
+        }
+        function cdf(arr) {
+            const s = Array.from(arr).sort((a, b) => a - b), y = s.map((_, i) => (i + 1) / s.length);
+            return {x: s, y};
+        }
+        const cMain = cdf(primary), cRec = cdf(rec);
+        console.log('Preparing to plot CDF and histogram');
+        Plotly.newPlot('cdf-main', [
+            {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+            {
+                x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
+                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+            },
+            {
+                x: [primary[Math.floor(n / 2)]],
+                y: [cMain.y[Math.floor(n / 2)]],
+                mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(primary[Math.floor(n / 2)])}`],
+                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+            }
+        ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
+        console.log('Plotted cdf-main');
+        // Histogram
+        const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
+        const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
+        function histogram(arr, tgt, title, xlabel, marks, mid) {
+            const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
+            Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency'), config)
+                .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
+        }
+        histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
+        console.log('Plotted hist-main');
+        Plotly.newPlot('cdf-rec', [
+            {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+            {
+                x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
+                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+            },
+            {
+                x: [rec[Math.floor(n / 2)]],
+                y: [cRec.y[Math.floor(n / 2)]],
+                mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(rec[Math.floor(n / 2)])}`],
+                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+            }
+        ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
+        console.log('Plotted cdf-rec');
+        histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
+        console.log('Plotted hist-rec');
+        // Tornado chart
+        // Use deterministic mid-case for tornado
+        let detStoiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) / detFVF) / 1e6;
+        let detGiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc) / detFVF) / 5.8e6;
+        let detTotal = detStoiip + detGiip;
+        let baseVol = metric === 'stoiip' ? detStoiip : metric === 'giip' ? detGiip : detTotal;
+        const names = [], lows = [], highs = [], spans = [];
+        dists.forEach((d, idx) => {
+            const conv = convTriplet(d.name, d.raw.slice());
+            let {low, high} = lowHighFrom(d.type, conv);
+            const b = boundsFor(d.name, fluid);
+            low = Math.max(b.min, Math.min(b.max, low));
+            high = Math.max(b.min, Math.min(b.max, high));
+            const vLo = [detA, detH, detNTG, detPHI, detSW, detFVF, mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)];
+            const vHi = vLo.slice();
+            vLo[idx] = low;
+            vHi[idx] = high;
+            let volLo, volHi;
+            if (metric === 'stoiip') {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6;
+            } else if (metric === 'giip') {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
+            } else {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6 + (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6 + (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
+            }
+            names.push(d.name);
+            lows.push(volLo - baseVol);
+            highs.push(volHi - baseVol);
+            spans.push(Math.max(Math.abs(volLo - baseVol), Math.abs(volHi - baseVol)));
+        });
+        const order = [...names.keys()].sort((a, b) => spans[b] - spans[a]);
+        const y = order.map(i => names[i]);
+        const xLow = order.map(i => lows[i]);
+        const xHigh = order.map(i => highs[i]);
+        const cs = getComputedStyle(document.documentElement);
+        const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
+        const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
+        const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+        const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+        Plotly.newPlot('tornado', [
+            {type: 'bar', orientation: 'h', y: y, x: xLow, marker: {color: colorsLow}, width: 0.6, name: 'Δ at Low (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at Low: %{x:.2f} ' + labelSet.unit + '<extra></extra>'},
+            {type: 'bar', orientation: 'h', y: y, x: xHigh, marker: {color: colorsHigh}, width: 0.6, name: 'Δ at High (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at High: %{x:.2f} ' + labelSet.unit + '<extra></extra>'}
+        ], {
+            autosize: true, showlegend: false,
+            legend: {orientation: 'h', x: 0.02, y: 1.08},
+            title: {text: 'Sensitivity (Tornado) — ' + labelSet.primary + '  (relative to Deterministic Mid Case)', font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
+            barmode: 'overlay',
+            margin: {t: 86, l: 220, r: 46, b: 110},
+            xaxis: {title: 'Change in ' + labelSet.primary + ' (' + labelSet.unit + ')', gridcolor: "#EFEFEF", zeroline: true, zerolinewidth: 1, zerolinecolor: '#9CA3AF', showticklabels: true, ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', tickformat: '.2f'},
+            yaxis: {title: '', automargin: true, categoryorder: 'array', categoryarray: y, autorange: 'reversed'},
+            paper_bgcolor: '#fff', plot_bgcolor: '#fff'
+        }, config);
+        document.getElementById('downloadCsv').disabled = false;
+        document.getElementById('downloadSamples').disabled = false;
+        document.getElementById('downloadCsv').onclick = () => downloadSummaryCSV(FLUID.value, labelSet, {P90, P50, P10, RP90, RP50, RP10, detIn: primary[Math.floor(n / 2)], detRec: rec[Math.floor(n / 2)], yDetIn: cMain.y[Math.floor(n / 2)], yDetRec: cRec.y[Math.floor(n / 2)], fmt});
+        lastSim = {unit: labelSet.unit, n, primary, rec, fluid, inputs: {A, H, NTG, PHI, SW, Bo, Rs, RF}};
+        document.getElementById('downloadSamples').onclick = downloadSamplesCSV;
+        wireSyncedZoom();
+        wireSyncedZoom();
+        console.log('Completed oil simulation block');
+        return;
+    } else if (fluid === 'gas') {
+        A = new Float64Array(n);
+        H = new Float64Array(n);
+        NTG = new Float64Array(n);
+        PHI = new Float64Array(n);
+        SW = new Float64Array(n);
+        Bg = new Float64Array(n);
+        RF = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+            A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
+            H[i] = drawOne(dists[1].type, dists[1].raw, dists[1].v, 'Thickness', dists[1].wPerc);
+            NTG[i] = drawOne(dists[2].type, dists[2].raw, dists[2].v, 'Net to Gross', dists[2].wPerc);
+            PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
+            SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
+            Bg[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bg', dists[5].wPerc);
+            // Recovery Factor sampling (same as before)
+            if (rfType === 'Discrete') {
+                const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
+                const u = rnd();
+                if (vals.length === 0) {
+                    RF[i] = 0;
+                } else {
+                    let acc = 0, pick = vals[vals.length - 1];
+                    for (let k = 0; k < vals.length; k++) {
+                        acc += weights[k];
+                        if (u <= acc) {
+                            pick = vals[k];
+                            break;
+                        }
+                    }
+                    RF[i] = Math.max(0, Math.min(1, pick));
+                }
+            } else if (rfType === 'Triangular') {
+                RF[i] = sampleTriangular(rnd, rfRaw[0], rfRaw[1], rfRaw[2]);
+            } else if (rfType === 'Uniform') {
+                RF[i] = sampleUniform(rnd, rfRaw[0], rfRaw[2]);
+            } else if (rfType === 'Normal') {
+                RF[i] = sampleNormalTrunc(rnd, rfRaw[0], rfRaw[1], 0, 1);
+            } else {
+                const {mean, sigma} = normalFromP90P50P10(rfRaw[0], rfRaw[1], rfRaw[2]);
+                RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
+            }
+        }
+        console.log('Finished sampling all inputs for gas');
+        let giip = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+            giip[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 1e3;
+        }
+        let metric = resultType || 'total';
+        let primary, rec, labelSet;
+        if (metric === 'giip') {
+            primary = giip;
+            rec = giip.map((v, i) => v * RF[i]);
+            labelSet = {
+                primary: 'GIIP', unit: 'BCF', xMain: 'GIIP (BCF)', xRec: 'Recoverable (BCF)',
+                cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
+                formula: 'Formula (Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / (Bo × 5.8)</code> (SCF; plots in BCF).'
+            };
+        } else {
+            primary = giip;
+            rec = giip.map((v, i) => v * RF[i]);
+            labelSet = {
+                primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total MMBOE', xRec: 'Recoverable (MMBOE)',
+                cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
+                formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
+            };
+        }
+        console.log('Selected metric:', metric);
+        // Table
+        const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+        const quantiles = arr => {
+            const s = Array.from(arr).sort((a, b) => a - b), n = s.length;
+            return [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]];
+        };
+        const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
+        console.log('Quantiles:', {P90, P50, P10, RP90, RP50, RP10});
+        document.querySelector('.s-p90').textContent = fmt(P90);
+        document.querySelector('.s-p50').textContent = fmt(P50);
+        document.querySelector('.s-p10').textContent = fmt(P10);
+        document.querySelector('.s-mid').textContent = fmt(primary[Math.floor(n / 2)]);
+        document.querySelector('.r-p90').textContent = fmt(RP90);
+        document.querySelector('.r-p50').textContent = fmt(RP50);
+        document.querySelector('.r-p10').textContent = fmt(RP10);
+        document.querySelector('.r-mid').textContent = fmt(rec[Math.floor(n / 2)]);
+        document.getElementById('results-title').innerHTML = `Results (${labelSet.unit}) <span class=\"chip\">P90 / P50 / P10</span>`;
+        document.getElementById('metric-name').textContent = labelSet.primary;
+        document.getElementById('metric-name-rec').textContent = labelSet.metricRec;
+        document.getElementById('formula-note').innerHTML = labelSet.formula;
+        console.log('Updated summary table and labels');
+        // Plots
+        const config = {
+            displayModeBar: true,
+            responsive: true,
+            toImageButtonOptions: {format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3}
+        };
+        function baseLayout(title, x, y) {
+            return {
+                autosize: true,
+                title: {text: title, font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
+                paper_bgcolor: '#fff',
+                plot_bgcolor: '#fff',
+                margin: {t: 86, l: 90, r: 46, b: 110},
+                xaxis: {
+                    title: x,
+                    gridcolor: "#EFEFEF",
+                    color: "#374151",
+                    ticks: 'outside',
+                    ticklen: 6,
+                    tickwidth: 1,
+                    tickcolor: '#e5e7eb',
+                    titlefont: {size: 15},
+                    tickfont: {size: 13}
+                },
+                yaxis: {
+                    title: y,
+                    gridcolor: "#EFEFEF",
+                    color: "#374151",
+                    ticks: 'outside',
+                    ticklen: 6,
+                    tickwidth: 1,
+                    tickcolor: '#e5e7eb',
+                    titlefont: {size: 15},
+                    tickfont: {size: 13},
+                    fixedrange: true
+                },
+                hoverlabel: {font: {size: 12}},
+                showlegend: false
+            };
+        }
+        function cdf(arr) {
+            const s = Array.from(arr).sort((a, b) => a - b), y = s.map((_, i) => (i + 1) / s.length);
+            return {x: s, y};
+        }
+        const cMain = cdf(primary), cRec = cdf(rec);
+        console.log('Preparing to plot CDF and histogram');
+        Plotly.newPlot('cdf-main', [
+            {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+            {
+                x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
+                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+            },
+            {
+                x: [primary[Math.floor(n / 2)]],
+                y: [cMain.y[Math.floor(n / 2)]],
+                mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(primary[Math.floor(n / 2)])}`],
+                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+            }
+        ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
+        console.log('Plotted cdf-main');
+        // Histogram
+        const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
+        const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
+        function histogram(arr, tgt, title, xlabel, marks, mid) {
+            const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
+            Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency'), config)
+                .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
+        }
+        histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
+        console.log('Plotted hist-main');
+        Plotly.newPlot('cdf-rec', [
+            {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+            {
+                x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
+                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+            },
+            {
+                x: [rec[Math.floor(n / 2)]],
+                y: [cRec.y[Math.floor(n / 2)]],
+                mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(rec[Math.floor(n / 2)])}`],
+                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+            }
+        ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
+        console.log('Plotted cdf-rec');
+        histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
+        console.log('Plotted hist-rec');
+        // Tornado chart
+        // Use deterministic mid-case for tornado
+        let detStoiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) / detFVF) / 1e6;
+        let detGiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc) / detFVF) / 5.8e6;
+        let detTotal = detStoiip + detGiip;
+        let baseVol = metric === 'stoiip' ? detStoiip : metric === 'giip' ? detGiip : detTotal;
+        const names = [], lows = [], highs = [], spans = [];
+        dists.forEach((d, idx) => {
+            const conv = convTriplet(d.name, d.raw.slice());
+            let {low, high} = lowHighFrom(d.type, conv);
+            const b = boundsFor(d.name, fluid);
+            low = Math.max(b.min, Math.min(b.max, low));
+            high = Math.max(b.min, Math.min(b.max, high));
+            const vLo = [detA, detH, detNTG, detPHI, detSW, detFVF, mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)];
+            const vHi = vLo.slice();
+            vLo[idx] = low;
+            vHi[idx] = high;
+            let volLo, volHi;
+            if (metric === 'stoiip') {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6;
+            } else if (metric === 'giip') {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
+            } else {
+                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6 + (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
+                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6 + (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
+            }
+            names.push(d.name);
+            lows.push(volLo - baseVol);
+            highs.push(volHi - baseVol);
+            spans.push(Math.max(Math.abs(volLo - baseVol), Math.abs(volHi - baseVol)));
+        });
+        const order = [...names.keys()].sort((a, b) => spans[b] - spans[a]);
+        const y = order.map(i => names[i]);
+        const xLow = order.map(i => lows[i]);
+        const xHigh = order.map(i => highs[i]);
+        const cs = getComputedStyle(document.documentElement);
+        const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
+        const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
+        const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+        const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
+        Plotly.newPlot('tornado', [
+            {type: 'bar', orientation: 'h', y: y, x: xLow, marker: {color: colorsLow}, width: 0.6, name: 'Δ at Low (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at Low: %{x:.2f} ' + labelSet.unit + '<extra></extra>'},
+            {type: 'bar', orientation: 'h', y: y, x: xHigh, marker: {color: colorsHigh}, width: 0.6, name: 'Δ at High (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at High: %{x:.2f} ' + labelSet.unit + '<extra></extra>'}
+        ], {
+            autosize: true, showlegend: false,
+            legend: {orientation: 'h', x: 0.02, y: 1.08},
+            title: {text: 'Sensitivity (Tornado) — ' + labelSet.primary + '  (relative to Deterministic Mid Case)', font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
+            barmode: 'overlay',
+            margin: {t: 86, l: 220, r: 46, b: 110},
+            xaxis: {title: 'Change in ' + labelSet.primary + ' (' + labelSet.unit + ')', gridcolor: "#EFEFEF", zeroline: true, zerolinewidth: 1, zerolinecolor: '#9CA3AF', showticklabels: true, ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', tickformat: '.2f'},
+            yaxis: {title: '', automargin: true, categoryorder: 'array', categoryarray: y, autorange: 'reversed'},
+            paper_bgcolor: '#fff', plot_bgcolor: '#fff'
+        }, config);
+        document.getElementById('downloadCsv').disabled = false;
+        document.getElementById('downloadSamples').disabled = false;
+        document.getElementById('downloadCsv').onclick = () => downloadSummaryCSV(FLUID.value, labelSet, {P90, P50, P10, RP90, RP50, RP10, detIn: primary[Math.floor(n / 2)], detRec: rec[Math.floor(n / 2)], yDetIn: cMain.y[Math.floor(n / 2)], yDetRec: cRec.y[Math.floor(n / 2)], fmt});
+        lastSim = {unit: labelSet.unit, n, primary, rec, fluid, inputs: {A, H, NTG, PHI, SW, Bo, Rs, RF}};
+        document.getElementById('downloadSamples').onclick = downloadSamplesCSV;
+        wireSyncedZoom();
+        wireSyncedZoom();
+        console.log('Completed gas simulation block');
+        return;
+    }
+}
 /* ===== Synced X-axis zoom across results ===== */
 function wireSyncedZoom(){
   const ids=['cdf-main','hist-main','cdf-rec','hist-rec'];
@@ -1323,252 +1873,6 @@ document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && helpModal.cla
 /* Bootstrap */
 mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
 </script>
-<script>
-// === Scenario Builder (additive; uses existing helpers) ===
-(function(){
-  const Scenarios = [];
-  let BaselineId = null;
-
-  function readCurrentScenario(name){
-    const fluid = FLUID.value;
-    const iterations = parseInt(document.getElementById('iterations').value,10) || 10000;
-    const seed = (document.getElementById('seed').value || '').trim();
-    const nbins = Math.max(10, parseInt(document.getElementById('nbins').value,10)||100);
-    const areaUnit = document.getElementById('areaUnit').value;
-    const thickUnit = document.getElementById('thicknessUnit').value;
-    const rfType = document.querySelector('.rf-type').value;
-    const rfVals = [...document.querySelectorAll('.rf-v')].map(x=>x.value===""?NaN:Number(x.value));
-    const rfWeights = (rfType==='Discrete') ? [...document.querySelectorAll('#rf-weights input')].map(x=>Number(x.value)) : [NaN,NaN,NaN];
-
-    const rows=[...document.querySelectorAll('#params .dist-row')];
-    const inputs = {};
-    for(const row of rows){
-      const nameAttr = row.getAttribute('data-param');
-      const type = row.querySelector('.dist-type').value;
-      const raw = [...row.querySelectorAll('input.v')].map(el=>el.value===""?NaN:Number(el.value));
-      const wPerc = (type==='Discrete')
-        ? [...row.nextElementSibling.querySelectorAll('input')].map(x=>Number(x.value))
-        : [NaN,NaN,NaN];
-      inputs[nameAttr] = { type, values: raw, weights: wPerc };
-    }
-
-    return {
-      id: `scn_${Date.now()}_${Math.floor(Math.random()*1e6)}`,
-      name: name || `Scenario ${Scenarios.length+1}`,
-      fluid,
-      units: { area: areaUnit, thick: thickUnit },
-      rf: { type: rfType, values: rfVals, weights: rfWeights },
-      options: { iterations, seed, nbins },
-      inputs
-    };
-  }
-
-  function renderScenarioList(){
-    const list = document.getElementById('scnList');
-    list.innerHTML = '';
-    Scenarios.forEach((S) => {
-      const div = document.createElement('div');
-      div.className = 'scn-card';
-      div.innerHTML = `
-        <div class="head">
-          <div class="meta">
-            <strong>${S.name}</strong>
-            <span class="tag">${S.fluid}</span>
-            <span class="pill">${S.options.iterations} iters</span>
-            <span class="pill">${S.units.area}, ${S.units.thick}</span>
-          </div>
-          <div class="actions">
-            <button data-act="clone" data-id="${S.id}">Clone</button>
-            <button data-act="delete" data-id="${S.id}" class="good">Delete</button>
-          </div>
-        </div>`;
-      list.appendChild(div);
-    });
-
-    const baseSel = document.getElementById('baselineSelect');
-    baseSel.innerHTML = Scenarios.map(S=>`<option value="${S.id}">${S.name}</option>`).join('');
-    if(BaselineId===null && Scenarios.length>0) BaselineId = Scenarios[0].id;
-    if(BaselineId) baseSel.value = BaselineId;
-  }
-
-  document.getElementById('scnList').addEventListener('click', (e)=>{
-    const btn = e.target.closest('button'); if(!btn) return;
-    const id = btn.getAttribute('data-id');
-    const idx = Scenarios.findIndex(s=>s.id===id);
-    if(idx<0) return;
-    const act = btn.getAttribute('data-act');
-    if(act==='delete'){
-      Scenarios.splice(idx,1);
-      if(BaselineId===id) BaselineId = Scenarios[0]?.id || null;
-      renderScenarioList();
-    }else if(act==='clone'){
-      const copy = JSON.parse(JSON.stringify(Scenarios[idx]));
-      copy.id = `scn_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
-      copy.name = copy.name + " (copy)";
-      Scenarios.push(copy);
-      renderScenarioList();
-    }
-  });
-
-
-  function seededFrom(seedStr){
-    return seeded(seedStr || 'scn_shared_seed'); // reuse app RNG
-  }
-
-  function sampleOne(dist, rnd, name, fluid){
-    const {type, values, weights} = dist;
-    const {min, max} = boundsFor(name, fluid);
-    function clamp(x){ return Math.max(min, Math.min(max, x)); }
-
-    if(type==='Discrete'){
-      const {vals, weights:wn} = (function(rawVals, wPerc){
-        // reuse app helper if exists; else do a quick normalize
-        try { return discreteValsAndWeights(rawVals, wPerc); }
-        catch(e){
-          const xs = rawVals.filter(Number.isFinite);
-          const n = xs.length || 1;
-          const ws = (wPerc||[]).slice(0,n);
-          const sum = ws.reduce((a,b)=>a+(Number.isFinite(b)?b:0),0) || 1;
-          return {vals: xs, weights: ws.map(x=>(Number.isFinite(x)?x:0)/sum)};
-        }
-      })(values, weights);
-      if(!vals || vals.length===0) return NaN;
-      const u=rnd(); let acc=0;
-      for(let i=0;i<vals.length;i++){ acc+=wn[i]; if(u<=acc){ return clamp(vals[i]); } }
-      return clamp(vals[vals.length-1]);
-    }
-    if(type==='Triangular'){ return clamp(sampleTriangular(rnd, values[0], values[1], values[2])); }
-    if(type==='Uniform'){ return clamp(sampleUniform(rnd, values[0], values[2])); }
-    if(type==='Normal'){ return clamp(sampleNormalTrunc(rnd, values[0], values[1], min, max)); }
-    if(type==='Known Distribution'){
-      const {mean,sigma} = normalFromP90P50P10(values[0], values[1], values[2]);
-      return clamp(sampleNormalTrunc(rnd, mean, sigma, min, max));
-    }
-    return clamp(values[1] ?? values[0] ?? NaN);
-  }
-
-  function simulateScenario(S){
-    const n = S.options.iterations || 10000;
-    const rnd = seededFrom(S.options.seed || 'scn');
-
-    const A=new Float64Array(n),H=new Float64Array(n),NTG=new Float64Array(n),PHI=new Float64Array(n),
-          SW=new Float64Array(n),FVF=new Float64Array(n),RF=new Float64Array(n);
-
-    for(let i=0;i<n;i++){
-      A[i]   = sampleOne(S.inputs['Area'], rnd, 'Area', S.fluid)       * AREA_FACTORS[S.units.area];
-      H[i]   = sampleOne(S.inputs['Thickness'], rnd, 'Thickness', S.fluid) * THICK_FACTORS[S.units.thick];
-      NTG[i] = sampleOne(S.inputs['Net to Gross'], rnd, 'Net to Gross', S.fluid);
-      PHI[i] = sampleOne(S.inputs['Porosity'], rnd, 'Porosity', S.fluid);
-      SW[i]  = sampleOne(S.inputs['Water Saturation'], rnd, 'Water Saturation', S.fluid);
-      const fvfName = S.fluid==='gas' ? 'Bg' : 'Bo';
-      FVF[i] = sampleOne(S.inputs[fvfName], rnd, fvfName, S.fluid);
-      RF[i]  = Math.max(0, Math.min(1, sampleOne(S.rf, rnd, 'Recovery Factor', S.fluid)));
-    }
-
-    const primary=new Float64Array(n), rec=new Float64Array(n);
-    if(S.fluid==='gas'){
-      for(let i=0;i<n;i++){ primary[i]=computeVol('gas', A[i],H[i],NTG[i],PHI[i],SW[i],FVF[i]); rec[i]=primary[i]*RF[i]; }
-    }else{
-      for(let i=0;i<n;i++){ primary[i]=computeVol('oil', A[i],H[i],NTG[i],PHI[i],SW[i],FVF[i]); rec[i]=primary[i]*RF[i]; }
-    }
-
-    const sRec = Array.from(rec).filter(Number.isFinite).sort((a,b)=>a-b);
-    const nRec = sRec.length;
-    const p = q => {
-      if(nRec===0) return NaN;
-      const pos = (nRec-1)*q, b = Math.floor(pos), t = pos-b;
-      return (1-t)*sRec[b] + t*sRec[Math.min(nRec-1,b+1)];
-    };
-    const stats = { p10:p(0.1), p50:p(0.5), p90:p(0.9), mean: sRec.reduce((a,b)=>a+b,0)/Math.max(1,nRec) };
-
-    return { id:S.id, name:S.name, rec, stats };
-  }
-
-  document.getElementById('btnRunAll').addEventListener('click', ()=>{
-    if(Scenarios.length<2){ alert('Add at least two scenarios to compare.'); return; }
-    const results = Scenarios.map(simulateScenario);
-    renderComparison(results);
-  });
-
-  function renderComparison(results){
-    const baseId = BaselineId || results[0].id;
-    const base = results.find(r=>r.id===baseId) || results[0];
-
-    const traces = results.map((r)=>{
-      const xs = Array.from(r.rec).filter(Number.isFinite).sort((a,b)=>a-b);
-      const n = xs.length; const ys = xs.map((_,i)=>(i+1)/n);
-      return { x: xs, y: ys, mode:'lines', name: r.name };
-    });
-    const L = labelsFor(FLUID.value);
-    Plotly.newPlot('scnCDF', traces, {
-      title:{text:'Recoverable CDF — scenarios', x:0.02, xanchor:'left'},
-      xaxis:{title:L.xRec}, yaxis:{title:'Cumulative Probability', range:[0,1]},
-      paper_bgcolor:'#fff',plot_bgcolor:'#fff', showlegend:true, legend:{orientation:'h'}
-    }, {displayModeBar:true,responsive:true});
-
-    const rows = results.map(r=>{
-      const fmt = (x)=> Number.isFinite(x)? ((Math.abs(x)>=100)? x.toFixed(0): x.toFixed(2)) : '—';
-      const S = r.stats, B = base.stats;
-      const dP50 = S.p50 - B.p50;
-      const dP50p = Number.isFinite(B.p50) && B.p50!==0 ? dP50/B.p50*100 : NaN;
-      return `
-        <tr>
-          <td>${r.name}${r.id===base.id?' ⭐':''}</td>
-          <td style="text-align:right">${fmt(S.p10)}</td>
-          <td style="text-align:right">${fmt(S.p50)}</td>
-          <td style="text-align:right">${fmt(S.p90)}</td>
-          <td style="text-align:right">${fmt(S.mean)}</td>
-          <td style="text-align:right">${fmt(dP50)}</td>
-          <td style="text-align:right">${Number.isFinite(dP50p)? dP50p.toFixed(1)+'%':'—'}</td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('scnTable').innerHTML = `
-      <table>
-        <thead>
-          <tr><th>Scenario</th><th>P10</th><th>P50</th><th>P90</th><th>Mean</th><th>ΔP50 vs ${base.name}</th><th>ΔP50 %</th></tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  }
-
-  // wire baseline change early
-  (function(){
-    const el = document.getElementById('baselineSelect');
-    if(!el) return;
-    el.addEventListener('change', (e)=>{ BaselineId = e.target.value; });
-  })();
-
-  // add scenario
-  (function(){
-    const el = document.getElementById('btnAddScenario');
-    if(!el) return;
-    el.addEventListener('click', ()=>{
-      const nm = (document.getElementById('scnName').value || '').trim();
-      const scn = readCurrentScenario(nm);
-      Scenarios.push(scn);
-      if(!BaselineId) BaselineId = scn.id;
-      document.getElementById('scnName').value='';
-      renderScenarioList();
-    });
-  })();
-
-  // export
-  (function(){
-    const el = document.getElementById('btnExportScenarios');
-    if(!el) return;
-    el.addEventListener('click', ()=>{
-      const blob = new Blob([JSON.stringify(Scenarios, null, 2)], {type:'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'scenarios.json'; a.click();
-      URL.revokeObjectURL(url);
-    });
-  })();
-})();
-</script>
-
 </body>
 </html>
-
 
