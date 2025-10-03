@@ -1072,17 +1072,10 @@ function runSimulation() {
 
     const n = iters;
     let A, H, NTG, PHI, SW, Bo, Bg, Rs, RF;
-    // Calculate deterministic base values for tornado and mid-case
-    let detA, detH, detNTG, detPHI, detSW, detFVF;
-    detA = mostLikely(dists[0].type, dists[0].v, dists[0].wPerc);
-    detH = mostLikely(dists[1].type, dists[1].v, dists[1].wPerc);
-    detNTG = mostLikely(dists[2].type, dists[2].v, dists[2].wPerc);
-    detPHI = mostLikely(dists[3].type, dists[3].v, dists[3].wPerc);
-    detSW = mostLikely(dists[4].type, dists[4].v, dists[4].wPerc);
-    detFVF = mostLikely(dists[5].type, dists[5].v, dists[5].wPerc);
-
-    // Simulation logic for 'oil', 'gas', and 'oilgas' fluid types
+    // Calculate deterministic mid case for each fluid type
+    let detMidCase;
     if (fluid === 'oilgas') {
+        let metric = resultType || 'total';
         A = new Float64Array(n);
         H = new Float64Array(n);
         NTG = new Float64Array(n);
@@ -1127,7 +1120,6 @@ function runSimulation() {
                 RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
             }
         }
-        console.log('Finished sampling all inputs for oilgas');
         let stoiip = new Float64Array(n);
         let giip = new Float64Array(n);
         let totalMMBOE = new Float64Array(n);
@@ -1136,8 +1128,7 @@ function runSimulation() {
             giip[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e6;
             totalMMBOE[i] = stoiip[i] + giip[i];
         }
-        let metric = resultType || 'total';
-        let primary, rec, labelSet;
+        let primary, rec, labelSet, detMidCase, detRecMidCase;
         if (metric === 'stoiip') {
             primary = stoiip;
             rec = stoiip.map((v, i) => v * RF[i]);
@@ -1146,6 +1137,13 @@ function runSimulation() {
                 cdfTitle: 'STOIIP CDF', histTitle: 'STOIIP Histogram', metricRec: 'Recoverable STOIIP',
                 formula: 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
             };
+            detMidCase = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
+                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
+                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
+                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
+                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
+                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 1e6;
+            detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         } else if (metric === 'giip') {
             primary = giip;
             rec = giip.map((v, i) => v * RF[i]);
@@ -1154,6 +1152,14 @@ function runSimulation() {
                 cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
                 formula: 'Formula (Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / (Bo × 5.8)</code> (SCF; plots in BCF).'
             };
+            detMidCase = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
+                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
+                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
+                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
+                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
+                * mostLikely(dists[6].type, dists[6].raw, dists[6].wPerc)
+                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 5.8e6;
+            detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         } else {
             primary = totalMMBOE;
             rec = totalMMBOE.map((v, i) => v * RF[i]);
@@ -1162,29 +1168,38 @@ function runSimulation() {
                 cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
                 formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
             };
+            // Deterministic mid case for total is sum of deterministic STOIIP and GIIP
+            const detStoiip = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
+                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
+                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
+                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
+                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
+                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 1e6;
+            const detGiip = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
+                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
+                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
+                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
+                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
+                * mostLikely(dists[6].type, dists[6].raw, dists[6].wPerc)
+                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 5.8e6;
+            detMidCase = detStoiip + detGiip;
+            detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         }
-        console.log('Selected metric:', metric);
         // Table
         const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
         const quantiles = arr => {
-            const s = Array.from(arr).sort((a, b) => a - b), n = s.length;
-            return [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]];
+            const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+            return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
         };
         const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
-        console.log('Quantiles:', {P90, P50, P10, RP90, RP50, RP10});
         document.querySelector('.s-p90').textContent = fmt(P90);
         document.querySelector('.s-p50').textContent = fmt(P50);
         document.querySelector('.s-p10').textContent = fmt(P10);
-        document.querySelector('.s-mid').textContent = fmt(primary[Math.floor(n / 2)]);
+        document.querySelector('.s-mid').textContent = fmt(detMidCase);
         document.querySelector('.r-p90').textContent = fmt(RP90);
         document.querySelector('.r-p50').textContent = fmt(RP50);
         document.querySelector('.r-p10').textContent = fmt(RP10);
-        document.querySelector('.r-mid').textContent = fmt(rec[Math.floor(n / 2)]);
-        document.getElementById('results-title').innerHTML = `Results (${labelSet.unit}) <span class=\"chip\">P90 / P50 / P10</span>`;
-        document.getElementById('metric-name').textContent = labelSet.primary;
-        document.getElementById('metric-name-rec').textContent = labelSet.metricRec;
-        document.getElementById('formula-note').innerHTML = labelSet.formula;
-        console.log('Updated summary table and labels');
+        document.querySelector('.r-mid').textContent = fmt(detRecMidCase);
         // Plots
         const config = {
             displayModeBar: true,
@@ -1230,7 +1245,6 @@ function runSimulation() {
             return {x: s, y};
         }
         const cMain = cdf(primary), cRec = cdf(rec);
-        console.log('Preparing to plot CDF and histogram');
         Plotly.newPlot('cdf-main', [
             {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
             {
@@ -1240,15 +1254,14 @@ function runSimulation() {
                 textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
             },
             {
-                x: [primary[Math.floor(n / 2)]],
-                y: [cMain.y[Math.floor(n / 2)]],
+                x: [detMidCase],
+                y: [cMain.y[cMain.x.findIndex(xx => xx >= detMidCase)]],
                 mode: 'markers+text',
                 marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(primary[Math.floor(n / 2)])}`],
+                text: [`Det. Mid Case=${fmt(detMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
         ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
-        console.log('Plotted cdf-main');
         // Histogram
         const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
         const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
@@ -1258,7 +1271,6 @@ function runSimulation() {
                 .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
         }
         histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
-        console.log('Plotted hist-main');
         Plotly.newPlot('cdf-rec', [
             {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
             {
@@ -1268,82 +1280,19 @@ function runSimulation() {
                 textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
             },
             {
-                x: [rec[Math.floor(n / 2)]],
-                y: [cRec.y[Math.floor(n / 2)]],
+                x: [detRecMidCase],
+                y: [cRec.y[cRec.x.findIndex(xx => xx >= detRecMidCase)]],
                 mode: 'markers+text',
                 marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(rec[Math.floor(n / 2)])}`],
+                text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
         ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
-        console.log('Plotted cdf-rec');
         histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
-        console.log('Plotted hist-rec');
-        // Tornado chart
-        // Use deterministic mid-case for tornado
-        let detStoiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) / detFVF) / 1e6;
-        let detGiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc) / detFVF) / 5.8e6;
-        let detTotal = detStoiip + detGiip;
-        let baseVol = metric === 'stoiip' ? detStoiip : metric === 'giip' ? detGiip : detTotal;
-        const names = [], lows = [], highs = [], spans = [];
-        dists.forEach((d, idx) => {
-            const conv = convTriplet(d.name, d.raw.slice());
-            let {low, high} = lowHighFrom(d.type, conv);
-            const b = boundsFor(d.name, fluid);
-            low = Math.max(b.min, Math.min(b.max, low));
-            high = Math.max(b.min, Math.min(b.max, high));
-            const vLo = [detA, detH, detNTG, detPHI, detSW, detFVF, mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)];
-            const vHi = vLo.slice();
-            vLo[idx] = low;
-            vHi[idx] = high;
-            let volLo, volHi;
-            if (metric === 'stoiip') {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6;
-            } else if (metric === 'giip') {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
-            } else {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6 + (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6 + (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
-            }
-            names.push(d.name);
-            lows.push(volLo - baseVol);
-            highs.push(volHi - baseVol);
-            spans.push(Math.max(Math.abs(volLo - baseVol), Math.abs(volHi - baseVol)));
-        });
-        const order = [...names.keys()].sort((a, b) => spans[b] - spans[a]);
-        const y = order.map(i => names[i]);
-        const xLow = order.map(i => lows[i]);
-        const xHigh = order.map(i => highs[i]);
-        const cs = getComputedStyle(document.documentElement);
-        const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
-        const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
-        const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-        const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-        Plotly.newPlot('tornado', [
-            {type: 'bar', orientation: 'h', y: y, x: xLow, marker: {color: colorsLow}, width: 0.6, name: 'Δ at Low (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at Low: %{x:.2f} ' + labelSet.unit + '<extra></extra>'},
-            {type: 'bar', orientation: 'h', y: y, x: xHigh, marker: {color: colorsHigh}, width: 0.6, name: 'Δ at High (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at High: %{x:.2f} ' + labelSet.unit + '<extra></extra>'}
-        ], {
-            autosize: true, showlegend: false,
-            legend: {orientation: 'h', x: 0.02, y: 1.08},
-            title: {text: 'Sensitivity (Tornado) — ' + labelSet.primary + '  (relative to Deterministic Mid Case)', font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
-            barmode: 'overlay',
-            margin: {t: 86, l: 220, r: 46, b: 110},
-            xaxis: {title: 'Change in ' + labelSet.primary + ' (' + labelSet.unit + ')', gridcolor: "#EFEFEF", zeroline: true, zerolinewidth: 1, zerolinecolor: '#9CA3AF', showticklabels: true, ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', tickformat: '.2f'},
-            yaxis: {title: '', automargin: true, categoryorder: 'array', categoryarray: y, autorange: 'reversed'},
-            paper_bgcolor: '#fff', plot_bgcolor: '#fff'
-        }, config);
-        document.getElementById('downloadCsv').disabled = false;
-        document.getElementById('downloadSamples').disabled = false;
-        document.getElementById('downloadCsv').onclick = () => downloadSummaryCSV(FLUID.value, labelSet, {P90, P50, P10, RP90, RP50, RP10, detIn: primary[Math.floor(n / 2)], detRec: rec[Math.floor(n / 2)], yDetIn: cMain.y[Math.floor(n / 2)], yDetRec: cRec.y[Math.floor(n / 2)], fmt});
-        lastSim = {unit: labelSet.unit, n, primary, rec, fluid, inputs: {A, H, NTG, PHI, SW, Bo, Rs, RF}};
-        document.getElementById('downloadSamples').onclick = downloadSamplesCSV;
-        wireSyncedZoom();
-        wireSyncedZoom();
-        console.log('Completed oilgas simulation block');
         return;
-    } else if (fluid === 'oil') {
+    }
+    // --- Oil fluid type ---
+    if (fluid === 'oil') {
         A = new Float64Array(n);
         H = new Float64Array(n);
         NTG = new Float64Array(n);
@@ -1358,7 +1307,7 @@ function runSimulation() {
             PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
             SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
             Bo[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bo', dists[5].wPerc);
-            // Recovery Factor sampling (same as before)
+            // Recovery Factor
             if (rfType === 'Discrete') {
                 const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
                 const u = rnd();
@@ -1386,52 +1335,37 @@ function runSimulation() {
                 RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
             }
         }
-        console.log('Finished sampling all inputs for oil');
         let stoiip = new Float64Array(n);
         for (let i = 0; i < n; i++) {
             stoiip[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
         }
-        let metric = resultType || 'total';
-        let primary, rec, labelSet;
-        if (metric === 'stoiip') {
-            primary = stoiip;
-            rec = stoiip.map((v, i) => v * RF[i]);
-            labelSet = {
-                primary: 'STOIIP', unit: 'MMBO', xMain: 'STOIIP (MMBO)', xRec: 'Recoverable (MMBO)',
-                cdfTitle: 'STOIIP CDF', histTitle: 'STOIIP Histogram', metricRec: 'Recoverable STOIIP',
-                formula: 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
-            };
-        } else {
-            primary = stoiip;
-            rec = stoiip.map((v, i) => v * RF[i]);
-            labelSet = {
-                primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total MMBOE', xRec: 'Recoverable (MMBOE)',
-                cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
-                formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
-            };
-        }
-        console.log('Selected metric:', metric);
+        let rec = stoiip.map((v, i) => v * RF[i]);
+        let labelSet = labelsFor('oil');
+        // Deterministic mid-case
+        const detMidCase = computeVol('oil',
+            mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc),
+            mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc),
+            mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc),
+            mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc),
+            mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc),
+            mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)
+        );
+        const detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         // Table
         const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
         const quantiles = arr => {
-            const s = Array.from(arr).sort((a, b) => a - b), n = s.length;
-            return [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]];
+            const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+            return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
         };
-        const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
-        console.log('Quantiles:', {P90, P50, P10, RP90, RP50, RP10});
+        const [P90, P50, P10] = quantiles(stoiip), [RP90, RP50, RP10] = quantiles(rec);
         document.querySelector('.s-p90').textContent = fmt(P90);
         document.querySelector('.s-p50').textContent = fmt(P50);
         document.querySelector('.s-p10').textContent = fmt(P10);
-        document.querySelector('.s-mid').textContent = fmt(primary[Math.floor(n / 2)]);
+        document.querySelector('.s-mid').textContent = fmt(detMidCase);
         document.querySelector('.r-p90').textContent = fmt(RP90);
         document.querySelector('.r-p50').textContent = fmt(RP50);
         document.querySelector('.r-p10').textContent = fmt(RP10);
-        document.querySelector('.r-mid').textContent = fmt(rec[Math.floor(n / 2)]);
-        document.getElementById('results-title').innerHTML = `Results (${labelSet.unit}) <span class=\"chip\">P90 / P50 / P10</span>`;
-        document.getElementById('metric-name').textContent = labelSet.primary;
-        document.getElementById('metric-name-rec').textContent = labelSet.metricRec;
-        document.getElementById('formula-note').innerHTML = labelSet.formula;
-        console.log('Updated summary table and labels');
+        document.querySelector('.r-mid').textContent = fmt(detRecMidCase);
         // Plots
         const config = {
             displayModeBar: true,
@@ -1476,8 +1410,7 @@ function runSimulation() {
             const s = Array.from(arr).sort((a, b) => a - b), y = s.map((_, i) => (i + 1) / s.length);
             return {x: s, y};
         }
-        const cMain = cdf(primary), cRec = cdf(rec);
-        console.log('Preparing to plot CDF and histogram');
+        const cMain = cdf(stoiip), cRec = cdf(rec);
         Plotly.newPlot('cdf-main', [
             {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
             {
@@ -1487,15 +1420,14 @@ function runSimulation() {
                 textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
             },
             {
-                x: [primary[Math.floor(n / 2)]],
-                y: [cMain.y[Math.floor(n / 2)]],
+                x: [detMidCase],
+                y: [cMain.y[cMain.x.findIndex(xx => xx >= detMidCase)]],
                 mode: 'markers+text',
                 marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(primary[Math.floor(n / 2)])}`],
+                text: [`Det. Mid Case=${fmt(detMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
         ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
-        console.log('Plotted cdf-main');
         // Histogram
         const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
         const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
@@ -1504,8 +1436,7 @@ function runSimulation() {
             Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency'), config)
                 .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
         }
-        histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
-        console.log('Plotted hist-main');
+        histogram(stoiip, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], stoiip[Math.floor(n / 2)]);
         Plotly.newPlot('cdf-rec', [
             {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
             {
@@ -1515,82 +1446,19 @@ function runSimulation() {
                 textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
             },
             {
-                x: [rec[Math.floor(n / 2)]],
-                y: [cRec.y[Math.floor(n / 2)]],
+                x: [detRecMidCase],
+                y: [cRec.y[cRec.x.findIndex(xx => xx >= detRecMidCase)]],
                 mode: 'markers+text',
                 marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(rec[Math.floor(n / 2)])}`],
+                text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
         ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
-        console.log('Plotted cdf-rec');
         histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
-        console.log('Plotted hist-rec');
-        // Tornado chart
-        // Use deterministic mid-case for tornado
-        let detStoiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) / detFVF) / 1e6;
-        let detGiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc) / detFVF) / 5.8e6;
-        let detTotal = detStoiip + detGiip;
-        let baseVol = metric === 'stoiip' ? detStoiip : metric === 'giip' ? detGiip : detTotal;
-        const names = [], lows = [], highs = [], spans = [];
-        dists.forEach((d, idx) => {
-            const conv = convTriplet(d.name, d.raw.slice());
-            let {low, high} = lowHighFrom(d.type, conv);
-            const b = boundsFor(d.name, fluid);
-            low = Math.max(b.min, Math.min(b.max, low));
-            high = Math.max(b.min, Math.min(b.max, high));
-            const vLo = [detA, detH, detNTG, detPHI, detSW, detFVF, mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)];
-            const vHi = vLo.slice();
-            vLo[idx] = low;
-            vHi[idx] = high;
-            let volLo, volHi;
-            if (metric === 'stoiip') {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6;
-            } else if (metric === 'giip') {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
-            } else {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6 + (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6 + (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
-            }
-            names.push(d.name);
-            lows.push(volLo - baseVol);
-            highs.push(volHi - baseVol);
-            spans.push(Math.max(Math.abs(volLo - baseVol), Math.abs(volHi - baseVol)));
-        });
-        const order = [...names.keys()].sort((a, b) => spans[b] - spans[a]);
-        const y = order.map(i => names[i]);
-        const xLow = order.map(i => lows[i]);
-        const xHigh = order.map(i => highs[i]);
-        const cs = getComputedStyle(document.documentElement);
-        const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
-        const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
-        const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-        const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-        Plotly.newPlot('tornado', [
-            {type: 'bar', orientation: 'h', y: y, x: xLow, marker: {color: colorsLow}, width: 0.6, name: 'Δ at Low (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at Low: %{x:.2f} ' + labelSet.unit + '<extra></extra>'},
-            {type: 'bar', orientation: 'h', y: y, x: xHigh, marker: {color: colorsHigh}, width: 0.6, name: 'Δ at High (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at High: %{x:.2f} ' + labelSet.unit + '<extra></extra>'}
-        ], {
-            autosize: true, showlegend: false,
-            legend: {orientation: 'h', x: 0.02, y: 1.08},
-            title: {text: 'Sensitivity (Tornado) — ' + labelSet.primary + '  (relative to Deterministic Mid Case)', font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
-            barmode: 'overlay',
-            margin: {t: 86, l: 220, r: 46, b: 110},
-            xaxis: {title: 'Change in ' + labelSet.primary + ' (' + labelSet.unit + ')', gridcolor: "#EFEFEF", zeroline: true, zerolinewidth: 1, zerolinecolor: '#9CA3AF', showticklabels: true, ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', tickformat: '.2f'},
-            yaxis: {title: '', automargin: true, categoryorder: 'array', categoryarray: y, autorange: 'reversed'},
-            paper_bgcolor: '#fff', plot_bgcolor: '#fff'
-        }, config);
-        document.getElementById('downloadCsv').disabled = false;
-        document.getElementById('downloadSamples').disabled = false;
-        document.getElementById('downloadCsv').onclick = () => downloadSummaryCSV(FLUID.value, labelSet, {P90, P50, P10, RP90, RP50, RP10, detIn: primary[Math.floor(n / 2)], detRec: rec[Math.floor(n / 2)], yDetIn: cMain.y[Math.floor(n / 2)], yDetRec: cRec.y[Math.floor(n / 2)], fmt});
-        lastSim = {unit: labelSet.unit, n, primary, rec, fluid, inputs: {A, H, NTG, PHI, SW, Bo, Rs, RF}};
-        document.getElementById('downloadSamples').onclick = downloadSamplesCSV;
-        wireSyncedZoom();
-        wireSyncedZoom();
-        console.log('Completed oil simulation block');
         return;
-    } else if (fluid === 'gas') {
+    }
+    // --- Gas fluid type ---
+    if (fluid === 'gas') {
         A = new Float64Array(n);
         H = new Float64Array(n);
         NTG = new Float64Array(n);
@@ -1605,7 +1473,7 @@ function runSimulation() {
             PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
             SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
             Bg[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bg', dists[5].wPerc);
-            // Recovery Factor sampling (same as before)
+            // Recovery Factor
             if (rfType === 'Discrete') {
                 const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
                 const u = rnd();
@@ -1633,52 +1501,37 @@ function runSimulation() {
                 RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
             }
         }
-        console.log('Finished sampling all inputs for gas');
         let giip = new Float64Array(n);
         for (let i = 0; i < n; i++) {
             giip[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 1e3;
         }
-        let metric = resultType || 'total';
-        let primary, rec, labelSet;
-        if (metric === 'giip') {
-            primary = giip;
-            rec = giip.map((v, i) => v * RF[i]);
-            labelSet = {
-                primary: 'GIIP', unit: 'BCF', xMain: 'GIIP (BCF)', xRec: 'Recoverable (BCF)',
-                cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
-                formula: 'Formula (Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / (Bo × 5.8)</code> (SCF; plots in BCF).'
-            };
-        } else {
-            primary = giip;
-            rec = giip.map((v, i) => v * RF[i]);
-            labelSet = {
-                primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total MMBOE', xRec: 'Recoverable (MMBOE)',
-                cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
-                formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
-            };
-        }
-        console.log('Selected metric:', metric);
+        let rec = giip.map((v, i) => v * RF[i]);
+        let labelSet = labelsFor('gas');
+        // Deterministic mid-case
+        // FIX: Use 1e3 divisor for BCF, matching simulation
+        const detMidCase = (43560
+            * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
+            * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
+            * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
+            * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
+            * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
+            / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 1e3;
+        const detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         // Table
         const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
         const quantiles = arr => {
-            const s = Array.from(arr).sort((a, b) => a - b), n = s.length;
-            return [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]];
+            const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+            return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
         };
-        const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
-        console.log('Quantiles:', {P90, P50, P10, RP90, RP50, RP10});
+        const [P90, P50, P10] = quantiles(giip), [RP90, RP50, RP10] = quantiles(rec);
         document.querySelector('.s-p90').textContent = fmt(P90);
         document.querySelector('.s-p50').textContent = fmt(P50);
         document.querySelector('.s-p10').textContent = fmt(P10);
-        document.querySelector('.s-mid').textContent = fmt(primary[Math.floor(n / 2)]);
+        document.querySelector('.s-mid').textContent = fmt(detMidCase);
         document.querySelector('.r-p90').textContent = fmt(RP90);
         document.querySelector('.r-p50').textContent = fmt(RP50);
         document.querySelector('.r-p10').textContent = fmt(RP10);
-        document.querySelector('.r-mid').textContent = fmt(rec[Math.floor(n / 2)]);
-        document.getElementById('results-title').innerHTML = `Results (${labelSet.unit}) <span class=\"chip\">P90 / P50 / P10</span>`;
-        document.getElementById('metric-name').textContent = labelSet.primary;
-        document.getElementById('metric-name-rec').textContent = labelSet.metricRec;
-        document.getElementById('formula-note').innerHTML = labelSet.formula;
-        console.log('Updated summary table and labels');
+        document.querySelector('.r-mid').textContent = fmt(detRecMidCase);
         // Plots
         const config = {
             displayModeBar: true,
@@ -1723,8 +1576,7 @@ function runSimulation() {
             const s = Array.from(arr).sort((a, b) => a - b), y = s.map((_, i) => (i + 1) / s.length);
             return {x: s, y};
         }
-        const cMain = cdf(primary), cRec = cdf(rec);
-        console.log('Preparing to plot CDF and histogram');
+        const cMain = cdf(giip), cRec = cdf(rec);
         Plotly.newPlot('cdf-main', [
             {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
             {
@@ -1734,15 +1586,14 @@ function runSimulation() {
                 textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
             },
             {
-                x: [primary[Math.floor(n / 2)]],
-                y: [cMain.y[Math.floor(n / 2)]],
+                x: [detMidCase],
+                y: [cMain.y[cMain.x.findIndex(xx => xx >= detMidCase)]],
                 mode: 'markers+text',
                 marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(primary[Math.floor(n / 2)])}`],
+                text: [`Det. Mid Case=${fmt(detMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
         ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
-        console.log('Plotted cdf-main');
         // Histogram
         const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
         const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
@@ -1751,8 +1602,7 @@ function runSimulation() {
             Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency'), config)
                 .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
         }
-        histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
-        console.log('Plotted hist-main');
+        histogram(giip, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], giip[Math.floor(n / 2)]);
         Plotly.newPlot('cdf-rec', [
             {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
             {
@@ -1762,80 +1612,15 @@ function runSimulation() {
                 textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
             },
             {
-                x: [rec[Math.floor(n / 2)]],
-                y: [cRec.y[Math.floor(n / 2)]],
+                x: [detRecMidCase],
+                y: [cRec.y[cRec.x.findIndex(xx => xx >= detRecMidCase)]],
                 mode: 'markers+text',
                 marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(rec[Math.floor(n / 2)])}`],
+                text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
         ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
-        console.log('Plotted cdf-rec');
         histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
-        console.log('Plotted hist-rec');
-        // Tornado chart
-        // Use deterministic mid-case for tornado
-        let detStoiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) / detFVF) / 1e6;
-        let detGiip = (7758 * detA * detH * detNTG * detPHI * (1 - detSW) * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc) / detFVF) / 5.8e6;
-        let detTotal = detStoiip + detGiip;
-        let baseVol = metric === 'stoiip' ? detStoiip : metric === 'giip' ? detGiip : detTotal;
-        const names = [], lows = [], highs = [], spans = [];
-        dists.forEach((d, idx) => {
-            const conv = convTriplet(d.name, d.raw.slice());
-            let {low, high} = lowHighFrom(d.type, conv);
-            const b = boundsFor(d.name, fluid);
-            low = Math.max(b.min, Math.min(b.max, low));
-            high = Math.max(b.min, Math.min(b.max, high));
-            const vLo = [detA, detH, detNTG, detPHI, detSW, detFVF, mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)];
-            const vHi = vLo.slice();
-            vLo[idx] = low;
-            vHi[idx] = high;
-            let volLo, volHi;
-            if (metric === 'stoiip') {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6;
-            } else if (metric === 'giip') {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
-            } else {
-                volLo = (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) / vLo[5]) / 1e6 + (7758 * vLo[0] * vLo[1] * vLo[2] * vLo[3] * (1 - vLo[4]) * vLo[6] / vLo[5]) / 5.8e6;
-                volHi = (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) / vHi[5]) / 1e6 + (7758 * vHi[0] * vHi[1] * vHi[2] * vHi[3] * (1 - vHi[4]) * vHi[6] / vHi[5]) / 5.8e6;
-            }
-            names.push(d.name);
-            lows.push(volLo - baseVol);
-            highs.push(volHi - baseVol);
-            spans.push(Math.max(Math.abs(volLo - baseVol), Math.abs(volHi - baseVol)));
-        });
-        const order = [...names.keys()].sort((a, b) => spans[b] - spans[a]);
-        const y = order.map(i => names[i]);
-        const xLow = order.map(i => lows[i]);
-        const xHigh = order.map(i => highs[i]);
-        const cs = getComputedStyle(document.documentElement);
-        const COLOR_UP = (cs.getPropertyValue('--up').trim() || '#34D399');
-        const COLOR_DOWN = (cs.getPropertyValue('--down').trim() || '#F87171');
-        const colorsLow = xLow.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-        const colorsHigh = xHigh.map(v => v >= 0 ? COLOR_UP : COLOR_DOWN);
-        Plotly.newPlot('tornado', [
-            {type: 'bar', orientation: 'h', y: y, x: xLow, marker: {color: colorsLow}, width: 0.6, name: 'Δ at Low (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at Low: %{x:.2f} ' + labelSet.unit + '<extra></extra>'},
-            {type: 'bar', orientation: 'h', y: y, x: xHigh, marker: {color: colorsHigh}, width: 0.6, name: 'Δ at High (vs Det. Mid Case)', hovertemplate: '%{y}<br>Δ at High: %{x:.2f} ' + labelSet.unit + '<extra></extra>'}
-        ], {
-            autosize: true, showlegend: false,
-            legend: {orientation: 'h', x: 0.02, y: 1.08},
-            title: {text: 'Sensitivity (Tornado) — ' + labelSet.primary + '  (relative to Deterministic Mid Case)', font: {size: 19, color: "#111827"}, x: 0.02, xanchor: 'left'},
-            barmode: 'overlay',
-            margin: {t: 86, l: 220, r: 46, b: 110},
-            xaxis: {title: 'Change in ' + labelSet.primary + ' (' + labelSet.unit + ')', gridcolor: "#EFEFEF", zeroline: true, zerolinewidth: 1, zerolinecolor: '#9CA3AF', showticklabels: true, ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', tickformat: '.2f'},
-            yaxis: {title: '', automargin: true, categoryorder: 'array', categoryarray: y, autorange: 'reversed'},
-            paper_bgcolor: '#fff', plot_bgcolor: '#fff'
-        }, config);
-        document.getElementById('downloadCsv').disabled = false;
-        document.getElementById('downloadSamples').disabled = false;
-        document.getElementById('downloadCsv').onclick = () => downloadSummaryCSV(FLUID.value, labelSet, {P90, P50, P10, RP90, RP50, RP10, detIn: primary[Math.floor(n / 2)], detRec: rec[Math.floor(n / 2)], yDetIn: cMain.y[Math.floor(n / 2)], yDetRec: cRec.y[Math.floor(n / 2)], fmt});
-        lastSim = {unit: labelSet.unit, n, primary, rec, fluid, inputs: {A, H, NTG, PHI, SW, Bo, Rs, RF}};
-        document.getElementById('downloadSamples').onclick = downloadSamplesCSV;
-        wireSyncedZoom();
-        wireSyncedZoom();
-        console.log('Completed gas simulation block');
         return;
     }
 }

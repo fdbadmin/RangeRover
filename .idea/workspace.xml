@@ -4,8 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="768531bf-0bd2-4943-9d88-de75cd453f36" name="Changes" comment="New header area">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="768531bf-0bd2-4943-9d88-de75cd453f36" name="Changes" comment="Oil + Solution Gas added">
       <change beforePath="$PROJECT_DIR$/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/index.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -86,7 +85,7 @@
       <updated>1759191761957</updated>
       <workItem from="1759191762971" duration="2808000" />
       <workItem from="1759194912858" duration="1999000" />
-      <workItem from="1759444106141" duration="9179000" />
+      <workItem from="1759444106141" duration="13695000" />
     </task>
     <task id="LOCAL-00001" summary="Range Rover - Single Fluid and Single Reservoir">
       <option name="closed" value="true" />
@@ -152,7 +151,23 @@
       <option name="project" value="LOCAL" />
       <updated>1759195742042</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="Oil + Solution Gas added">
+      <option name="closed" value="true" />
+      <created>1759454988073</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1759454988073</updated>
+    </task>
+    <task id="LOCAL-00010" summary="Oil + Solution Gas added">
+      <option name="closed" value="true" />
+      <created>1759455064858</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1759455064858</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -174,6 +189,7 @@
     <MESSAGE value="Amendment to borders" />
     <MESSAGE value="Amendment to borders to 4cm l and r sides." />
     <MESSAGE value="CDF and HIST plots increased height by 5%" />
-    <option name="LAST_COMMIT_MESSAGE" value="CDF and HIST plots increased height by 5%" />
+    <MESSAGE value="Oil + Solution Gas added" />
+    <option name="LAST_COMMIT_MESSAGE" value="Oil + Solution Gas added" />
   </component>
 </project>
