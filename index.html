@@ -1375,10 +1375,10 @@ function runSimulation() {
         } else {
             primary = new Float64Array(n);
             rec = new Float64Array(n);
-            for (let i = 0; i < n; i++) {
-                primary[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / FVF[i]) / 1e3;
-                rec[i] = primary[i] * RF[i];
-            }
+      for (let i = 0; i < n; i++) {
+        primary[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / FVF[i]) / 1e9;
+        rec[i] = primary[i] * RF[i];
+      }
             labelSet = labelsFor('gas');
       detMidCase = (43560 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
         * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
