@@ -475,7 +475,7 @@ function labelsFor(fluid){
   return fluid==='gas'
     ? { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
         cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
-        formula:'Formula (Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
+        formula:'Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
       }
     : { primary:"STOIIP", unit:"MMBO", xMain:"STOIIP (MMBO)", xRec:"Recoverable (MMBO)",
         cdfTitle:"STOIIP CDF", histTitle:"STOIIP Histogram", metricRec:"Recoverable STOIIP",
@@ -555,11 +555,12 @@ const DIST_LABELS = {
 
 /* X-axis labels for previews */
 function xLabelFor(name){
-  if(isFrac(name)) return 'Percent';
+  if(isFrac(name)) return 'Percent (%)';
   if(name==='Area') return AREA.options[AREA.selectedIndex].text;
   if(name==='Thickness') return THICK.options[THICK.selectedIndex].text;
   if(name==='Bo') return 'RB/STB';
   if(name==='Bg') return 'scf/SCF';
+  if(name==='Rs') return 'scf/bbl';
   return '';
 }
 
@@ -937,7 +938,7 @@ function betaPDF01(x,a,b){
   const layout={
     autosize:true, margin:{t:40,l:56,r:28,b:74},
     title:{text:d.name,font:{size:14},x:0.02,xanchor:'left'},
-    xaxis:{title:xLabel, gridcolor:"#F3F4F6", tickfont:{size:11}, nticks:10, tickformat: isPercent?'.0%':undefined, autorange:true},
+    xaxis:{title:{text:xLabel, standoff:10}, gridcolor:"#F3F4F6", tickfont:{size:11}, nticks:10, tickformat: isPercent?'.0%':undefined, autorange:true, automargin:true},
     yaxis:{title:'', gridcolor:"#F3F4F6", tickfont:{size:11}, nticks:8, autorange:true},
     paper_bgcolor:'#fff',plot_bgcolor:'#fff', showlegend:false
   };
@@ -951,6 +952,7 @@ const Z = Z90;
 function baseFrom(type,v){ if(type==='Triangular'||type==='PERT')return v[1]; if(type==='Uniform')return 0.5*(v[0]+v[2]); if(type==='Normal')return v[0]; if(type==='Known Distribution')return v[1]; const xs=v.filter(Number.isFinite).sort((a,b)=>a-b); return xs[Math.floor(xs.length/2)]??NaN; }
 function lowHighFrom(type,v){ if(type==='Triangular'||type==='Uniform'||type==='PERT')return{low:v[0],high:v[2]}; if(type==='Normal')return{low:v[0]-Z*v[1],high:v[0]+Z*v[1]}; if(type==='Known Distribution')return{low:v[0],high:v[2]}; const xs=v.filter(Number.isFinite).sort((a,b)=>a-b); return {low:xs[0]??NaN,high:xs[xs.length-1]??NaN}; }
 function computeVol(fluid,A,H,NTG,PHI,SW,FVF){
+  // Oil result in MMBO; Gas result in BCF
   return (fluid==='gas')
     ? (43560*A*H*NTG*PHI*(1-SW)/FVF)/1e9
     : (7758*A*H*NTG*PHI*(1-SW)/FVF)/1e6;
@@ -1120,69 +1122,74 @@ function runSimulation() {
                 RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
             }
         }
-        let stoiip = new Float64Array(n);
-        let giip = new Float64Array(n);
-        let totalMMBOE = new Float64Array(n);
+    let stoiipMMBO = new Float64Array(n);
+    let giipBCF = new Float64Array(n);
+    let giipBOE = new Float64Array(n);
+    let totalMMBOE = new Float64Array(n);
         for (let i = 0; i < n; i++) {
-            stoiip[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
-            giip[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e6;
-            totalMMBOE[i] = stoiip[i] + giip[i];
+      // Oil volume in MMBO
+      stoiipMMBO[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
+      // Solution gas volume in BCF (scf -> BCF)
+      giipBCF[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 1e9;
+      // Gas in BOE (for total), using 5.8 Mscf per BOE
+      giipBOE[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e6;
+      totalMMBOE[i] = stoiipMMBO[i] + giipBOE[i];
         }
         let primary, rec, labelSet, detMidCase, detRecMidCase;
         if (metric === 'stoiip') {
-            primary = stoiip;
-            rec = stoiip.map((v, i) => v * RF[i]);
+      primary = stoiipMMBO;
+      rec = stoiipMMBO.map((v, i) => v * RF[i]);
             labelSet = {
                 primary: 'STOIIP', unit: 'MMBO', xMain: 'STOIIP (MMBO)', xRec: 'Recoverable (MMBO)',
                 cdfTitle: 'STOIIP CDF', histTitle: 'STOIIP Histogram', metricRec: 'Recoverable STOIIP',
                 formula: 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
             };
-            detMidCase = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
-                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
-                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
-                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
-                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
-                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 1e6;
-            detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
+      detMidCase = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
+        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
+        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
+        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
+      detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         } else if (metric === 'giip') {
-            primary = giip;
-            rec = giip.map((v, i) => v * RF[i]);
+      primary = giipBCF;
+      rec = giipBCF.map((v, i) => v * RF[i]);
             labelSet = {
                 primary: 'GIIP', unit: 'BCF', xMain: 'GIIP (BCF)', xRec: 'Recoverable (BCF)',
-                cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
-                formula: 'Formula (Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / (Bo × 5.8)</code> (SCF; plots in BCF).'
+        cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
+        formula: 'Formula (Solution Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF; plots in BCF).'
             };
-            detMidCase = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
-                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
-                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
-                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
-                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
-                * mostLikely(dists[6].type, dists[6].raw, dists[6].wPerc)
-                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 5.8e6;
-            detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
+      detMidCase = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
+        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
+        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
+        * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
+        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e9;
+      detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         } else {
-            primary = totalMMBOE;
-            rec = totalMMBOE.map((v, i) => v * RF[i]);
-            labelSet = {
-                primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total MMBOE', xRec: 'Recoverable (MMBOE)',
+      primary = totalMMBOE;
+      rec = totalMMBOE.map((v, i) => v * RF[i]);
+      labelSet = {
+        primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
                 cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
                 formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
             };
             // Deterministic mid case for total is sum of deterministic STOIIP and GIIP
-            const detStoiip = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
-                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
-                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
-                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
-                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
-                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 1e6;
-            const detGiip = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
-                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
-                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
-                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
-                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
-                * mostLikely(dists[6].type, dists[6].raw, dists[6].wPerc)
-                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 5.8e6;
-            detMidCase = detStoiip + detGiip;
+      const detStoiip = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
+        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
+        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
+        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
+      const detGiipBOE = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
+        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
+        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
+        * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
+        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 5.8e6;
+      detMidCase = detStoiip + detGiipBOE;
             detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         }
         // Table
@@ -1192,37 +1199,51 @@ function runSimulation() {
             return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
         };
         const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
-        document.querySelector('.s-p90').textContent = fmt(P90);
-        document.querySelector('.s-p50').textContent = fmt(P50);
-        document.querySelector('.s-p10').textContent = fmt(P10);
-        document.querySelector('.s-mid').textContent = fmt(detMidCase);
-        document.querySelector('.r-p90').textContent = fmt(RP90);
-        document.querySelector('.r-p50').textContent = fmt(RP50);
-        document.querySelector('.r-p10').textContent = fmt(RP10);
-        document.querySelector('.r-mid').textContent = fmt(detRecMidCase);
+    document.querySelector('.s-p90').textContent = fmt(P90);
+    document.querySelector('.s-p50').textContent = fmt(P50);
+    document.querySelector('.s-p10').textContent = fmt(P10);
+    // Compute P-value position for deterministic mid-case (exceedance = 1 - CDF)
+    const percentile = (arr, x) => {
+      const s = Array.from(arr).filter(Number.isFinite).sort((a,b)=>a-b);
+      if (s.length === 0 || !Number.isFinite(x)) return NaN;
+      let lo = 0, hi = s.length - 1;
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (s[mid] < x) lo = mid + 1; else hi = mid - 1; }
+      const idx = lo; // first index >= x
+      return idx < s.length ? (idx + 1) / s.length : 1;
+    };
+    const pDetMain = percentile(primary, detMidCase);
+    const pValMain = Number.isFinite(pDetMain) ? Math.max(0, Math.min(100, Math.round((1 - pDetMain) * 100))) : NaN;
+    document.querySelector('.s-mid').textContent = Number.isFinite(pValMain) ? `${fmt(detMidCase)} (P${pValMain})` : fmt(detMidCase);
+    document.querySelector('.r-p90').textContent = fmt(RP90);
+    document.querySelector('.r-p50').textContent = fmt(RP50);
+    document.querySelector('.r-p10').textContent = fmt(RP10);
+    const pDetRec = percentile(rec, detRecMidCase);
+    const pValRec = Number.isFinite(pDetRec) ? Math.max(0, Math.min(100, Math.round((1 - pDetRec) * 100))) : NaN;
+    document.querySelector('.r-mid').textContent = Number.isFinite(pValRec) ? `${fmt(detRecMidCase)} (P${pValRec})` : fmt(detRecMidCase);
         // Plots
         const config = {
             displayModeBar: true,
             responsive: true,
             toImageButtonOptions: {format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3}
         };
-        function baseLayout(title, x, y) {
+    function baseLayout(title, x, y) {
             return {
                 autosize: true,
                 title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'},
                 paper_bgcolor: '#fff',
                 plot_bgcolor: '#fff',
-                margin: {t: 86, l: 90, r: 46, b: 60},
+        margin: {t: 86, l: 90, r: 46, b: 70},
                 xaxis: {
-                    title: x,
+          title: {text: x, standoff: 10},
                     gridcolor: "#EFEFEF",
                     color: "#374151",
                     ticks: 'outside',
                     ticklen: 6,
                     tickwidth: 1,
                     tickcolor: '#e5e7eb',
-                    titlefont: {size: 15},
-                    tickfont: {size: 13}
+          titlefont: {size: 15},
+          tickfont: {size: 13},
+          automargin: true
                 },
                 yaxis: {
                     title: y,
@@ -1245,7 +1266,7 @@ function runSimulation() {
             return {x: s, y};
         }
         const cMain = cdf(primary), cRec = cdf(rec);
-        Plotly.newPlot('cdf-main', [
+    Plotly.newPlot('cdf-main', [
             {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
             {
                 x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
@@ -1261,13 +1282,13 @@ function runSimulation() {
                 text: [`Det. Mid Case=${fmt(detMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
-        ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
+  ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config);
         // Histogram
         const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
         const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
-        function histogram(arr, tgt, title, xlabel, marks, mid) {
+    function histogram(arr, tgt, title, xlabel, marks, mid) {
             const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
-            Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency'), config)
+      Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency (count)'), config)
                 .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
         }
         histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
@@ -1287,11 +1308,11 @@ function runSimulation() {
                 text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
-        ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
-        histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
-        // Tornado chart for oil/gas
-        const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
-        plotTornado(tornadoData);
+  ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config);
+  histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
+  // Tornado chart for oil/gas with unit-aware axis
+  const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
+  plotTornado(tornadoData, labelSet.unit);
         return;
     } else if (fluid === 'oil' || fluid === 'gas') {
         A = new Float64Array(n);
@@ -1337,7 +1358,7 @@ function runSimulation() {
             }
         }
         let primary, rec, labelSet, detMidCase, detRecMidCase;
-        if (fluid === 'oil') {
+  if (fluid === 'oil') {
             primary = new Float64Array(n);
             rec = new Float64Array(n);
             for (let i = 0; i < n; i++) {
@@ -1345,12 +1366,12 @@ function runSimulation() {
                 rec[i] = primary[i] * RF[i];
             }
             labelSet = labelsFor('oil');
-            detMidCase = (7758 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
-                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
-                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
-                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
-                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
-                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 1e6;
+      detMidCase = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
+        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
+        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
+        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
         } else {
             primary = new Float64Array(n);
             rec = new Float64Array(n);
@@ -1359,12 +1380,12 @@ function runSimulation() {
                 rec[i] = primary[i] * RF[i];
             }
             labelSet = labelsFor('gas');
-            detMidCase = (43560 * mostLikely(dists[0].type, dists[0].raw, dists[0].wPerc)
-                * mostLikely(dists[1].type, dists[1].raw, dists[1].wPerc)
-                * mostLikely(dists[2].type, dists[2].raw, dists[2].wPerc)
-                * mostLikely(dists[3].type, dists[3].raw, dists[3].wPerc)
-                * (1 - mostLikely(dists[4].type, dists[4].raw, dists[4].wPerc))
-                / mostLikely(dists[5].type, dists[5].raw, dists[5].wPerc)) / 1e3;
+      detMidCase = (43560 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
+        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
+        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
+        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e9;
         }
         detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         // Table, plots, tornado chart (unchanged)
@@ -1374,14 +1395,27 @@ function runSimulation() {
             return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
         };
         const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
-        document.querySelector('.s-p90').textContent = fmt(P90);
-        document.querySelector('.s-p50').textContent = fmt(P50);
-        document.querySelector('.s-p10').textContent = fmt(P10);
-        document.querySelector('.s-mid').textContent = fmt(detMidCase);
-        document.querySelector('.r-p90').textContent = fmt(RP90);
-        document.querySelector('.r-p50').textContent = fmt(RP50);
-        document.querySelector('.r-p10').textContent = fmt(RP10);
-        document.querySelector('.r-mid').textContent = fmt(detRecMidCase);
+    document.querySelector('.s-p90').textContent = fmt(P90);
+    document.querySelector('.s-p50').textContent = fmt(P50);
+    document.querySelector('.s-p10').textContent = fmt(P10);
+    // Compute P-value position for deterministic mid-case (exceedance = 1 - CDF)
+    const percentile2 = (arr, x) => {
+      const s = Array.from(arr).filter(Number.isFinite).sort((a,b)=>a-b);
+      if (s.length === 0 || !Number.isFinite(x)) return NaN;
+      let lo = 0, hi = s.length - 1;
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (s[mid] < x) lo = mid + 1; else hi = mid - 1; }
+      const idx = lo; // first index >= x
+      return idx < s.length ? (idx + 1) / s.length : 1;
+    };
+    const pDetMain2 = percentile2(primary, detMidCase);
+    const pValMain2 = Number.isFinite(pDetMain2) ? Math.max(0, Math.min(100, Math.round((1 - pDetMain2) * 100))) : NaN;
+    document.querySelector('.s-mid').textContent = Number.isFinite(pValMain2) ? `${fmt(detMidCase)} (P${pValMain2})` : fmt(detMidCase);
+    document.querySelector('.r-p90').textContent = fmt(RP90);
+    document.querySelector('.r-p50').textContent = fmt(RP50);
+    document.querySelector('.r-p10').textContent = fmt(RP10);
+    const pDetRec2 = percentile2(rec, detRecMidCase);
+    const pValRec2 = Number.isFinite(pDetRec2) ? Math.max(0, Math.min(100, Math.round((1 - pDetRec2) * 100))) : NaN;
+    document.querySelector('.r-mid').textContent = Number.isFinite(pValRec2) ? `${fmt(detRecMidCase)} (P${pValRec2})` : fmt(detRecMidCase);
         // Plots
         const config = {
             displayModeBar: true,
@@ -1394,17 +1428,18 @@ function runSimulation() {
                 title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'},
                 paper_bgcolor: '#fff',
                 plot_bgcolor: '#fff',
-                margin: {t: 86, l: 90, r: 46, b: 60},
+        margin: {t: 86, l: 90, r: 46, b: 70},
                 xaxis: {
-                    title: x,
+          title: {text: x, standoff: 10},
                     gridcolor: "#EFEFEF",
                     color: "#374151",
                     ticks: 'outside',
                     ticklen: 6,
                     tickwidth: 1,
                     tickcolor: '#e5e7eb',
-                    titlefont: {size: 15},
-                    tickfont: {size: 13}
+          titlefont: {size: 15},
+          tickfont: {size: 13},
+          automargin: true
                 },
                 yaxis: {
                     title: y,
@@ -1443,13 +1478,13 @@ function runSimulation() {
                 text: [`Det. Mid Case=${fmt(detMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
-        ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability'), config);
+  ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config);
         // Histogram
         const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
         const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
         function histogram(arr, tgt, title, xlabel, marks, mid) {
             const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
-            Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency'), config)
+      Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency (count)'), config)
                 .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
         }
         histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
@@ -1469,11 +1504,11 @@ function runSimulation() {
                 text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
                 textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
             }
-        ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability'), config);
-        histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
-        // Tornado chart for oil/gas
-        const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
-        plotTornado(tornadoData);
+  ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config);
+  histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
+  // Tornado chart for oil/gas
+  const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
+  plotTornado(tornadoData, labelSet.unit);
         return;
     }
 }
@@ -1481,35 +1516,43 @@ function runSimulation() {
 // Tornado sensitivity calculation function
 function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
     function getBase(idx) {
-        return mostLikely(params[idx].type, params[idx].raw, params[idx].wPerc);
+    // Use converted values (v) so unit selectors are respected
+    return mostLikely(params[idx].type, params[idx].v, params[idx].wPerc);
     }
-    function getLowHigh(idx) {
-        return lowHighFrom(params[idx].type, params[idx].raw);
-    }
+  function getLowHigh(idx) {
+    // Also derive low/high in the same unit space; lowHighFrom uses raw, then we convert per param
+    const {low, high} = lowHighFrom(params[idx].type, params[idx].raw);
+    const name = params[idx].name;
+    const conv = convTriplet(name, [low, NaN, high]);
+    return {low: conv[0], high: conv[2]};
+  }
     const baseRF = mostLikely(rfType, rfRaw, rfPerc);
-    function getBaseRs() {
-        if (fluid === 'oilgas') return mostLikely(params[6].type, params[6].raw, params[6].wPerc);
+  function getBaseRs() {
+    if (fluid === 'oilgas') return mostLikely(params[6].type, params[6].v, params[6].wPerc);
         return NaN;
     }
     function getBaseBo() {
-        if (fluid === 'oilgas') return mostLikely(params[5].type, params[5].raw, params[5].wPerc);
-        if (fluid === 'oil') return mostLikely(params[5].type, params[5].raw, params[5].wPerc);
+    if (fluid === 'oilgas') return mostLikely(params[5].type, params[5].v, params[5].wPerc);
+    if (fluid === 'oil') return mostLikely(params[5].type, params[5].v, params[5].wPerc);
         return NaN;
     }
     let base;
     if (fluid === 'oil') {
         base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
     } else if (fluid === 'gas') {
-        base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e3;
+    // Gas in BCF
+    base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e9;
     } else if (fluid === 'oilgas') {
         if (metric === 'stoiip') {
             base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
         } else if (metric === 'giip') {
-            base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 5.8e6;
+      // Solution gas in BCF
+      base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 1e9;
         } else {
             const detStoiip = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
-            const detGiip = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 5.8e6;
-            base = detStoiip + detGiip;
+      // Convert solution gas to BOE for total (5.8 Mscf/BOE)
+      const detGiipBOE = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 5.8e6;
+      base = detStoiip + detGiipBOE;
         }
     }
     const paramNames = params.map(p => p.name);
@@ -1520,23 +1563,26 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
         if (fluid === 'oil') {
             lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
             highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
-        } else if (fluid === 'gas') {
-            lowVal = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e3;
-            highVal = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e3;
+    } else if (fluid === 'gas') {
+      // Gas in BCF
+      lowVal = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e9;
+      highVal = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e9;
         } else if (fluid === 'oilgas') {
             if (metric === 'stoiip') {
                 lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
                 highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
             } else if (metric === 'giip') {
-                lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 5.8e6;
-                highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 5.8e6;
+        // Solution gas in BCF
+        lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 1e9;
+        highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 1e9;
             } else {
                 const detStoiipLow = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
-                const detGiipLow = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 5.8e6;
-                lowVal = detStoiipLow + detGiipLow;
+        // Solution gas to BOE for total
+        const detGiipLowBOE = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 5.8e6;
+        lowVal = detStoiipLow + detGiipLowBOE;
                 const detStoiipHigh = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
-                const detGiipHigh = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 5.8e6;
-                highVal = detStoiipHigh + detGiipHigh;
+        const detGiipHighBOE = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 5.8e6;
+        highVal = detStoiipHigh + detGiipHighBOE;
             }
         }
         bars.push({
@@ -1548,22 +1594,31 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
             highDelta: highVal - base
         });
     }
-    bars.sort((a, b) => Math.max(Math.abs(b.lowDelta), Math.abs(b.highDelta)) - Math.max(Math.abs(a.lowDelta), Math.abs(a.highDelta)));
+  // Sort by absolute impact: descending so biggest impact first
+  bars.sort((a, b) => Math.max(Math.abs(b.lowDelta), Math.abs(b.highDelta)) - Math.max(Math.abs(a.lowDelta), Math.abs(a.highDelta)));
     return bars;
 }
 
-function plotTornado(bars) {
-    const names = bars.map(b => b.name);
-    const lowDeltas = bars.map(b => b.lowDelta);
-    const highDeltas = bars.map(b => b.highDelta);
-    const base = bars.length > 0 ? bars[0].base : 0;
+function plotTornado(bars, unit) {
+  const names = bars.map(b => b.name);
+  const lowDeltas = bars.map(b => b.lowDelta);
+  const highDeltas = bars.map(b => b.highDelta);
+  const base = bars.length > 0 ? bars[0].base : 0;
+    
+    // Color bars: green for positive, red for negative
+    const lowColors = lowDeltas.map(d => d >= 0 ? '#34D399' : '#F87171');
+    const highColors = highDeltas.map(d => d >= 0 ? '#34D399' : '#F87171');
+    
     const traceLow = {
         x: lowDeltas,
         y: names,
         orientation: 'h',
         type: 'bar',
         name: 'Low',
-        marker: {color: 'var(--down)'},
+    offsetgroup: 'tornado',
+    alignmentgroup: 'tornado',
+    legendgroup: 'tornado',
+        marker: {color: lowColors},
         hovertemplate: '%{y}: %{x:.2f}<extra>Low</extra>'
     };
     const traceHigh = {
@@ -1572,33 +1627,44 @@ function plotTornado(bars) {
         orientation: 'h',
         type: 'bar',
         name: 'High',
-        marker: {color: 'var(--up)'},
+    offsetgroup: 'tornado',
+    alignmentgroup: 'tornado',
+    legendgroup: 'tornado',
+        marker: {color: highColors},
         hovertemplate: '%{y}: %{x:.2f}<extra>High</extra>'
     };
-    const layout = {
+  const layout = {
         title: {text: 'Tornado Sensitivity', font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'},
-        barmode: 'relative',
-        margin: {t: 60, l: 120, r: 40, b: 40},
+  barmode: 'relative',
+    margin: {t: 60, l: 120, r: 40, b: 70},
         xaxis: {
-            title: 'Change from Base',
+  title: { text: `Change from Base (${unit || ''})`, standoff: 10 },
             zeroline: true,
             zerolinewidth: 2,
             zerolinecolor: '#374151',
             gridcolor: '#EFEFEF',
             color: '#374151',
-            titlefont: {size: 15},
-            tickfont: {size: 13}
+    titlefont: {size: 15},
+    tickfont: {size: 13},
+    automargin: true
         },
-        yaxis: {
+    yaxis: {
             automargin: true,
             title: '',
             tickfont: {size: 13},
             gridcolor: '#EFEFEF',
-            color: '#374151'
+      color: '#374151',
+      type: 'category',
+      categoryorder: 'array',
+      categoryarray: names,
+      autorange: 'reversed' // biggest (first) at top
         },
         paper_bgcolor: '#fff',
         plot_bgcolor: '#fff',
-        showlegend: false
+        showlegend: false,
+        shapes: [
+          {type: 'line', x0: 0, x1: 0, y0: -0.5, y1: names.length-0.5, yref: 'y', line: {color: '#374151', width: 2}}
+        ]
     };
     Plotly.newPlot('tornado', [traceLow, traceHigh], layout, {displayModeBar: false, responsive: true});
 }
