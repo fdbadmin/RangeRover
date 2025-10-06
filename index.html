@@ -231,7 +231,7 @@
 
       <div class="form-grid">
         <label for="fluid">Fluid</label>
-        <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option><option value="oilgas">Oil + Solution Gas</option></select>
+  <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option><option value="oilgas">Oil + Solution Gas</option><option value="gasvo">Gas + Vaporized Oil</option></select>
 
         <label for="iterations">Iterations</label>
         <input id="iterations" type="number" min="100" step="100" value="10000" />
@@ -365,7 +365,7 @@
 
       <h3 id="quickstart">2) Quick start</h3>
       <ol>
-        <li>Select <b>Fluid</b>: Oil, Gas, or <b>Oil + Solution Gas</b> (units & formula update automatically).</li>
+  <li>Select <b>Fluid</b>: Oil, Gas, <b>Oil + Solution Gas</b>, or <b>Gas + Vaporized Oil</b> (units & formula update automatically).</li>
         <li>Choose units for <b>Area</b> and <b>Thickness</b>.</li>
         <li>For each parameter (Area, Thickness, NTG, Porosity, Water Saturation, Bo/Bg), choose a <b>Distribution</b> (Normal, Triangular, PERT, Uniform, Known, Discrete) and provide its parameters. Small labels above each box guide what to enter (e.g., Mean/Std Dev or Min/Mode/Max).</li>
         <li>Set the <b>Recovery Factor</b> distribution if needed.</li>
@@ -377,7 +377,7 @@
         <li><b>Area</b>: m², km², acres, ft² (internally converted to acres).</li>
         <li><b>Thickness</b>: m or ft (internally converted to ft).</li>
         <li><b>NTG</b>, <b>Porosity</b>, <b>Water Saturation</b> are treated as <b>fractions</b> (0–1). Previews display in % for readability.</li>
-        <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas; <b>Rs</b> (scf/bbl) when <b>Oil + Solution Gas</b> is selected.</li>
+  <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas; <b>Rs</b> (scf/bbl) with <b>Oil + Solution Gas</b>; <b>Rv</b> (bbl/scf) with <b>Gas + Vaporized Oil</b>.</li>
       </ul>
 
       <h3 id="dists">4) Distributions</h3>
@@ -400,14 +400,19 @@
       <ul>
         <li><b>Oil (STOIIP):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (Bo in RB/STB) → plots in MMBO</li>
         <li><b>Gas (GIIP):</b> <code>43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (Bg in scf/SCF) → plots in BCF</li>
-        <li><b>Solution gas (GIIP from oil):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF) → plots in BCF</li>
-        <li><b>Total (MMBOE):</b> <code>STOIIP (MMBO) + GIIP<sub>sg</sub> (MMBOE)</code>, where <code>GIIP<sub>sg</sub> (MMBOE) = SCF / 5.8e9</code> (equivalently <code>BCF / 5.8</code> using 5.8 Mscf per BOE)</li>
+  <li><b>Solution gas (GIIP from oil):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF) → plots in BCF</li>
+  <li><b>Total (Oil + Solution Gas, MMBOE):</b> <code>STOIIP (MMBO) + GIIP<sub>sg</sub> (MMBOE)</code>, where <code>GIIP<sub>sg</sub> (MMBOE) = SCF / 5.8e9</code> (equivalently <code>BCF / 5.8</code>).</li>
+  <li><b>Vaporized oil from gas:</b> <code>43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB) → plots in MMBO</li>
+  <li><b>Total (Gas + Vaporized Oil, MMBOE):</b> <code>GIIP (MMBOE) + Vaporized oil (MMBO)</code>, where <code>GIIP (MMBOE) = SCF / 5.8e9</code> (equivalently <code>BCF / 5.8</code>).</li>
       </ul>
       <p>Recoverable volume = In-place × RF. P10/P50/P90 are computed from the empirical CDF of simulated samples. Deterministic mid-case uses the most likely input values (Normal→mean; Triangular/PERT→mode; Uniform→midpoint; Known→P50; Discrete→highest‑weighted value — equal weights if blank).</p>
 
       <h3 id="outputs">7) Outputs</h3>
       <ul>
-        <li><b>Results metric</b> (Oil + Solution Gas only): Choose <b>STOIIP (MMBO)</b>, <b>GIIP (BCF)</b>, or <b>Total (MMBOE)</b>. All plots, the tornado axis, and the results table follow the selected unit.</li>
+        <li><b>Results metric</b> (Oil + Solution Gas or Gas + Vaporized Oil):
+          <br>• Oil + Solution Gas: <b>STOIIP (MMBO)</b>, <b>GIIP (BCF)</b>, or <b>Total (MMBOE)</b>
+          <br>• Gas + Vaporized Oil: <b>GIIP (BCF)</b>, <b>Vaporized Oil (MMBO)</b>, or <b>Total (MMBOE)</b>
+          <br>All plots, the tornado axis, and the results table follow the selected unit.</li>
         <li><b>In‑place & Recoverable CDFs</b> with red markers at P90/P50/P10 and a purple diamond for the deterministic mid‑case.</li>
         <li><b>Histograms</b> with vertical markers for P90/P50/P10 and deterministic mid‑case.</li>
         <li><b>Tornado sensitivity</b> shows impact of low/high changes in each input vs deterministic mid‑case. Green = upside, Red = downside.</li>
@@ -446,7 +451,8 @@
         <li><b>NTG</b>: Net to Gross. <b>φ</b>: Porosity. <b>Sw</b>: Water saturation.</li>
         <li><b>PERT</b>: Beta‑PERT distribution (λ=4) defined by Min, Mode, Max; smoother alternative to Triangular.</li>
         <li><b>Bg</b>: Gas formation volume factor in scf/SCF (reservoir cubic feet per standard cubic foot).</li>
-        <li><b>Rs</b>: Solution gas‑oil ratio in scf/bbl.</li>
+  <li><b>Rs</b>: Solution gas‑oil ratio in scf/bbl.</li>
+  <li><b>Rv</b>: Vaporized oil‑gas ratio in bbl/scf.</li>
       </ul>
 
       <div class="manual-footer">
@@ -473,18 +479,27 @@ function paramsFor(fluid){
     return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true}];
   if(fluid==='oilgas')
     return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true},{name:"Rs",pos:true}];
+  if(fluid==='gasvo')
+    return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true},{name:"Rv",pos:true}];
   return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true}];
 }
 function labelsFor(fluid){
-  return fluid==='gas'
-    ? { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
-        cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
-        formula:'Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
-      }
-    : { primary:"STOIIP", unit:"MMBO", xMain:"STOIIP (MMBO)", xRec:"Recoverable (MMBO)",
-        cdfTitle:"STOIIP CDF", histTitle:"STOIIP Histogram", metricRec:"Recoverable STOIIP",
-        formula:'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
-      };
+  if(fluid==='gas'){
+    return { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
+      cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
+      formula:'Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
+    };
+  }
+  if(fluid==='gasvo'){
+    return { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
+      cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
+      formula:'Formula (Gas + Vaporized Oil): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF). Vaporized oil from gas cap: <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB). Total MMBOE = GIIP(MMBOE) + VO(MMBO).'
+    };
+  }
+  return { primary:"STOIIP", unit:"MMBO", xMain:"STOIIP (MMBO)", xRec:"Recoverable (MMBO)",
+    cdfTitle:"STOIIP CDF", histTitle:"STOIIP Histogram", metricRec:"Recoverable STOIIP",
+    formula:'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
+  };
 }
 
 /* ===== RNG & distributions ===== */
@@ -535,6 +550,7 @@ function boundsFor(name,fluid){
   if(isFrac(name)) return {min:0, max:1};
   if(name==='Bo') return {min:1.0, max:Infinity};
   if(name==='Bg') return {min:1e-9, max:Infinity};
+  if(name==='Rv') return {min:0, max:Infinity};
   return {min:-Infinity, max:Infinity};
 }
 function sampleNormalTrunc(r, mean, std, min, max){
@@ -565,6 +581,7 @@ function xLabelFor(name){
   if(name==='Bo') return 'RB/STB';
   if(name==='Bg') return 'scf/SCF';
   if(name==='Rs') return 'scf/bbl';
+  if(name==='Rv') return 'bbl/scf';
   return '';
 }
 
@@ -588,7 +605,7 @@ function mountParams(){
   console.log('params container:', host);
   host.innerHTML='';
   PARAMS.forEach(p=>{
-    const unit = p.name==="Bo" ? "(RB/STB)" : p.name==="Bg" ? "(scf/SCF)" : p.name==="Rs" ? "(scf/bbl)" : isFrac(p.name) ? "(fraction)" : "";
+    const unit = p.name==="Bo" ? "(RB/STB)" : p.name==="Bg" ? "(scf/SCF)" : p.name==="Rs" ? "(scf/bbl)" : p.name==="Rv" ? "(bbl/scf)" : isFrac(p.name) ? "(fraction)" : "";
     const row = document.createElement('div');
     row.className = 'dist-row';
     row.setAttribute('data-param', p.name);
@@ -708,14 +725,16 @@ function mountResultsTypeSelector(){
   if (oldSel) oldSel.remove();
   let oldLabel = formGrid.querySelector('label[for="resultType"]');
   if (oldLabel) oldLabel.remove();
-  // Only add for oilgas
-  if(FLUID.value==='oilgas'){
+  // Only add for oil+solution gas or gas+vaporized oil
+  if(FLUID.value==='oilgas' || FLUID.value==='gasvo'){
     const label = document.createElement('label');
     label.textContent = 'Results Metric';
     label.setAttribute('for', 'resultType');
     const sel = document.createElement('select');
     sel.id = 'resultType';
-    sel.innerHTML = '<option value="stoiip">STOIIP (MMBO)</option><option value="giip">GIIP (bcf)</option><option value="total" selected>Total (MMBOE)</option>';
+    sel.innerHTML = FLUID.value==='oilgas'
+      ? '<option value="stoiip">STOIIP (MMBO)</option><option value="giip">GIIP (BCF)</option><option value="total" selected>Total (MMBOE)</option>'
+      : '<option value="giip">GIIP (BCF)</option><option value="vo">Vaporized Oil (MMBO)</option><option value="total" selected>Total (MMBOE)</option>';
     // Find thicknessUnit selector and its note
     const thickUnit = document.getElementById('thicknessUnit');
     let insertAfter = thickUnit;
@@ -753,6 +772,8 @@ function prefillDefaults(){
     D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"__RF":[0.5,0.05]};
   } else if(FLUID.value === 'oilgas') {
     D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"Rs":[800,100],"__RF":[0.5,0.05]};
+  } else if(FLUID.value === 'gasvo') {
+    D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"Rv":[0.001,0.0002],"__RF":[0.5,0.05]};
   } else {
     D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"__RF":[0.5,0.05]};
   }
@@ -990,7 +1011,7 @@ function runSimulation() {
     }
     const rnd = seeded((document.getElementById('seed').value || "").trim());
     const fluid = FLUID.value;
-    const resultType = (fluid === 'oilgas' && document.getElementById('resultType')) ? document.getElementById('resultType').value : null;
+  const resultType = ((fluid === 'oilgas' || fluid==='gasvo') && document.getElementById('resultType')) ? document.getElementById('resultType').value : null;
     console.log('fluid:', fluid, 'resultType:', resultType);
     const rows = [...document.querySelectorAll('#params .dist-row')];
     const dists = [];
@@ -1077,10 +1098,10 @@ function runSimulation() {
     }
 
     const n = iters;
-    let A, H, NTG, PHI, SW, Bo, Bg, Rs, RF;
+  let A, H, NTG, PHI, SW, Bo, Bg, Rs, Rv, RF;
     let detMidCase;
     let metric = null;
-    if (fluid === 'oilgas') {
+  if (fluid === 'oilgas') {
         metric = resultType || 'total';
         A = new Float64Array(n);
         H = new Float64Array(n);
@@ -1088,7 +1109,7 @@ function runSimulation() {
         PHI = new Float64Array(n);
         SW = new Float64Array(n);
         Bo = new Float64Array(n);
-        Rs = new Float64Array(n);
+  Rs = new Float64Array(n);
         RF = new Float64Array(n);
         for (let i = 0; i < n; i++) {
             A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
@@ -1126,10 +1147,10 @@ function runSimulation() {
                 RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1);
             }
         }
-    let stoiipMMBO = new Float64Array(n);
-    let giipBCF = new Float64Array(n);
-    let giipBOE = new Float64Array(n);
-    let totalMMBOE = new Float64Array(n);
+  let stoiipMMBO = new Float64Array(n);
+  let giipBCF = new Float64Array(n);
+  let giipBOE = new Float64Array(n);
+  let totalMMBOE = new Float64Array(n);
         for (let i = 0; i < n; i++) {
       // Oil volume in MMBO
       stoiipMMBO[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
@@ -1140,7 +1161,7 @@ function runSimulation() {
   giipBOE[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e9;
       totalMMBOE[i] = stoiipMMBO[i] + giipBOE[i];
         }
-        let primary, rec, labelSet, detMidCase, detRecMidCase;
+  let primary, rec, labelSet, detMidCase, detRecMidCase;
         if (metric === 'stoiip') {
       primary = stoiipMMBO;
       rec = stoiipMMBO.map((v, i) => v * RF[i]);
@@ -1172,163 +1193,245 @@ function runSimulation() {
         * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
         / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e9;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
-    } else {
+        } else {
+      // total = STOIIP (MMBO) + GIIP (MMBOE)
       primary = totalMMBOE;
       rec = totalMMBOE.map((v, i) => v * RF[i]);
       labelSet = {
         primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
-                cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
-                formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
-            };
-            // Deterministic mid case for total is sum of deterministic STOIIP and GIIP
+        cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
+        formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
+      };
+      // Deterministic mid case for total is sum of deterministic STOIIP and GIIP (in MMBOE)
       const detStoiip = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
         * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
         * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
         * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
         * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
         / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
-  const detGiipBOE = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+      const detGiipBOE = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
         * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
         * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
         * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
         * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
         * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
-  / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 5.8e9;
+        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 5.8e9;
       detMidCase = detStoiip + detGiipBOE;
-            detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
+      detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         }
-    // Ensure the Results header and metric labels reflect the current metric and unit (MMBO, BCF, or MMBOE)
-    const resHdr = document.getElementById('results-title');
-    if (resHdr) resHdr.innerHTML = `Results (${labelSet.unit}) <span class="chip">P90 / P50 / P10</span>`;
-    const metricNameEl = document.getElementById('metric-name');
-    const metricNameRecEl = document.getElementById('metric-name-rec');
-    if (metricNameEl) metricNameEl.textContent = labelSet.primary;
-    if (metricNameRecEl) metricNameRecEl.textContent = labelSet.metricRec;
-    const formulaEl = document.getElementById('formula-note');
-    if (formulaEl) formulaEl.innerHTML = labelSet.formula;
-        // Table
-        const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
-        const quantiles = arr => {
-            const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
-            return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
+
+        // Common outputs for oil + solution gas (mirrors gas+vo block)
+        const resHdr_og = document.getElementById('results-title');
+        if (resHdr_og) resHdr_og.innerHTML = `Results (${labelSet.unit}) <span class="chip">P90 / P50 / P10</span>`;
+        const metricNameEl_og = document.getElementById('metric-name');
+        const metricNameRecEl_og = document.getElementById('metric-name-rec');
+        if (metricNameEl_og) metricNameEl_og.textContent = labelSet.primary;
+        if (metricNameRecEl_og) metricNameRecEl_og.textContent = labelSet.metricRec;
+        const formulaEl_og = document.getElementById('formula-note');
+        if (formulaEl_og) formulaEl_og.innerHTML = labelSet.formula;
+
+        const fmt_og = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+        const quantiles_og = arr => {
+          const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+          return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
         };
-        const [P90, P50, P10] = quantiles(primary), [RP90, RP50, RP10] = quantiles(rec);
-    document.querySelector('.s-p90').textContent = fmt(P90);
-    document.querySelector('.s-p50').textContent = fmt(P50);
-    document.querySelector('.s-p10').textContent = fmt(P10);
-    // Compute P-value position for deterministic mid-case (exceedance = 1 - CDF)
-    const percentile = (arr, x) => {
+        const [P90_og, P50_og, P10_og] = quantiles_og(primary), [RP90_og, RP50_og, RP10_og] = quantiles_og(rec);
+        document.querySelector('.s-p90').textContent = fmt_og(P90_og);
+        document.querySelector('.s-p50').textContent = fmt_og(P50_og);
+        document.querySelector('.s-p10').textContent = fmt_og(P10_og);
+        const percentile_og = (arr, x) => {
+          const s = Array.from(arr).filter(Number.isFinite).sort((a,b)=>a-b);
+          if (s.length === 0 || !Number.isFinite(x)) return NaN;
+          let lo = 0, hi = s.length - 1;
+          while (lo <= hi) { const mid = (lo + hi) >> 1; if (s[mid] < x) lo = mid + 1; else hi = mid - 1; }
+          const idx = lo; return idx < s.length ? (idx + 1) / s.length : 1;
+        };
+        const pDetMain_og = percentile_og(primary, detMidCase);
+        const pValMain_og = Number.isFinite(pDetMain_og) ? Math.max(0, Math.min(100, Math.round((1 - pDetMain_og) * 100))) : NaN;
+        document.querySelector('.s-mid').textContent = Number.isFinite(pValMain_og) ? `${fmt_og(detMidCase)} (P${pValMain_og})` : fmt_og(detMidCase);
+        document.querySelector('.r-p90').textContent = fmt_og(RP90_og);
+        document.querySelector('.r-p50').textContent = fmt_og(RP50_og);
+        document.querySelector('.r-p10').textContent = fmt_og(RP10_og);
+        const pDetRec_og = percentile_og(rec, detRecMidCase);
+        const pValRec_og = Number.isFinite(pDetRec_og) ? Math.max(0, Math.min(100, Math.round((1 - pDetRec_og) * 100))) : NaN;
+        document.querySelector('.r-mid').textContent = Number.isFinite(pValRec_og) ? `${fmt_og(detRecMidCase)} (P${pValRec_og})` : fmt_og(detRecMidCase);
+
+        const config_og = { displayModeBar: true, responsive: true, toImageButtonOptions: {format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3} };
+        function baseLayout_og(title, x, y) {
+          return { autosize: true, title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'}, paper_bgcolor: '#fff', plot_bgcolor: '#fff', margin: {t: 86, l: 90, r: 46, b: 70}, xaxis: { title: {text: x, standoff: 10}, gridcolor: '#EFEFEF', color: '#374151', ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', titlefont: {size: 15}, tickfont: {size: 13}, automargin: true }, yaxis: { title: y, gridcolor: '#EFEFEF', color: '#374151', ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', titlefont: {size: 15}, tickfont: {size: 13}, fixedrange: true }, hoverlabel: {font: {size: 12}}, showlegend: false };
+        }
+        function cdf_og(arr){ const s = Array.from(arr).sort((a,b)=>a-b), y = s.map((_,i)=>(i+1)/s.length); return {x:s, y}; }
+        const cMain_og = cdf_og(primary), cRec_og = cdf_og(rec);
+        Plotly.newPlot('cdf-main', [
+          {x: cMain_og.x, y: cMain_og.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+          { x: [P90_og, P50_og, P10_og], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_og(P90_og)}`, `P50=${fmt_og(P50_og)}`, `P10=${fmt_og(P10_og)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
+          { x: [detMidCase], y: [cMain_og.y[cMain_og.x.findIndex(xx=>xx>=detMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_og(detMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+        ], baseLayout_og(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config_og);
+        const vLines_og = xs => xs.map(x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'#ED1C24'}}));
+        const midLine_og = x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'var(--mid)'}});
+        function histogram_og(arr, tgt, title, xlabel, marks, mid){ const trace={x:Array.from(arr), type:'histogram', nbinsx: nbins, marker:{color:'var(--blue-light)', line:{width:0.8, color:'var(--blue-stroke)'}}}; Plotly.newPlot(tgt, [trace], baseLayout_og(title, xlabel, 'Frequency (count)'), config_og).then(gd=>Plotly.relayout(gd,{shapes:[...vLines_og(marks), midLine_og(mid)]})); }
+        histogram_og(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90_og, P50_og, P10_og], primary[Math.floor(n / 2)]);
+        Plotly.newPlot('cdf-rec', [
+          {x: cRec_og.x, y: cRec_og.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+          { x: [RP90_og, RP50_og, RP10_og], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_og(RP90_og)}`, `P50=${fmt_og(RP50_og)}`, `P10=${fmt_og(RP10_og)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
+          { x: [detRecMidCase], y: [cRec_og.y[cRec_og.x.findIndex(xx=>xx>=detRecMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_og(detRecMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+        ], baseLayout_og(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config_og);
+        histogram_og(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90_og, RP50_og, RP10_og], rec[Math.floor(n / 2)]);
+  const tornadoData_og = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
+  plotTornado(tornadoData_og, labelSet.unit);
+  wireSyncedZoom();
+        return;
+  } else if (fluid === 'gasvo') {
+    metric = resultType || 'total';
+    A = new Float64Array(n); H = new Float64Array(n); NTG = new Float64Array(n); PHI = new Float64Array(n); SW = new Float64Array(n);
+    Bg = new Float64Array(n); Rv = new Float64Array(n); RF = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
+      H[i] = drawOne(dists[1].type, dists[1].raw, dists[1].v, 'Thickness', dists[1].wPerc);
+      NTG[i] = drawOne(dists[2].type, dists[2].raw, dists[2].v, 'Net to Gross', dists[2].wPerc);
+      PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
+      SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
+      Bg[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bg', dists[5].wPerc);
+      Rv[i] = drawOne(dists[6].type, dists[6].raw, dists[6].v, 'Rv', dists[6].wPerc);
+      // RF
+      if (rfType === 'Discrete') {
+        const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
+        const u = rnd();
+        if (vals.length === 0) { RF[i] = 0; } else {
+          let acc = 0, pick = vals[vals.length - 1];
+          for (let k = 0; k < vals.length; k++) { acc += weights[k]; if (u <= acc) { pick = vals[k]; break; } }
+          RF[i] = Math.max(0, Math.min(1, pick));
+        }
+      } else if (rfType === 'Triangular') { RF[i] = sampleTriangular(rnd, rfRaw[0], rfRaw[1], rfRaw[2]); }
+      else if (rfType === 'Uniform') { RF[i] = sampleUniform(rnd, rfRaw[0], rfRaw[2]); }
+      else if (rfType === 'Normal') { RF[i] = sampleNormalTrunc(rnd, rfRaw[0], rfRaw[1], 0, 1); }
+      else { const {mean, sigma} = normalFromP90P50P10(rfRaw[0], rfRaw[1], rfRaw[2]); RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1); }
+    }
+    // Arrays
+    let giipBCF_g = new Float64Array(n);    // GIIP (BCF)
+    let giipMMBOE = new Float64Array(n);    // GIIP converted to MMBOE via 5.8e9
+    let voMMBO = new Float64Array(n);       // Vaporized oil (MMBO)
+    let totalMMBOE_vo = new Float64Array(n);// Total in MMBOE
+    for (let i = 0; i < n; i++) {
+      // Gas in BCF
+      giipBCF_g[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 1e9;
+      // Gas in MMBOE
+      giipMMBOE[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 5.8e9;
+      // Vaporized oil from gas (STB -> MMBO)
+      voMMBO[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rv[i] / Bg[i]) / 1e6;
+      totalMMBOE_vo[i] = giipMMBOE[i] + voMMBO[i];
+    }
+  // Choose metric
+  let primary, rec, labelSet, detMidCase, detRecMidCase;
+  if (metric === 'giip') {
+      primary = giipBCF_g; rec = giipBCF_g.map((v,i)=>v*RF[i]);
+      labelSet = { primary: 'GIIP', unit: 'BCF', xMain: 'GIIP (BCF)', xRec: 'Recoverable (BCF)',
+        cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
+        formula: 'Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'};
+      detMidCase = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
+        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
+        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
+        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
+        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 1e9;
+      detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
+    } else if (metric === 'vo') {
+      primary = voMMBO; rec = voMMBO.map((v,i)=>v*RF[i]);
+      labelSet = { primary: 'Vaporized Oil', unit: 'MMBO', xMain: 'Vaporized Oil (MMBO)', xRec: 'Recoverable (MMBO)',
+        cdfTitle: 'Vaporized Oil CDF', histTitle: 'Vaporized Oil Histogram', metricRec: 'Recoverable Vaporized Oil',
+        formula: 'Formula (Vaporized Oil): <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in MMBO).'};
+      detMidCase = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
+        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
+        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
+        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
+        * mostLikely(dists[6].type,dists[6].v,dists[6].wPerc)
+        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 1e6;
+      detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
+    } else { // total MMBOE
+      primary = totalMMBOE_vo; rec = totalMMBOE_vo.map((v,i)=>v*RF[i]);
+      labelSet = { primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
+        cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
+        formula: 'Formula (Total): <code>Total MMBOE = GIIP(MMBOE) + Vaporized Oil (MMBO)</code>.' };
+      const detGiipMMBOE = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
+        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
+        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
+        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
+        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 5.8e9;
+      const detVoMMBO = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
+        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
+        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
+        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
+        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
+        * mostLikely(dists[6].type,dists[6].v,dists[6].wPerc)
+        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 1e6;
+      detMidCase = detGiipMMBOE + detVoMMBO;
+      detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
+    }
+
+    // Common outputs for gas + vaporized oil (mirrors oil+solution gas block)
+    const resHdr_gv = document.getElementById('results-title');
+    if (resHdr_gv) resHdr_gv.innerHTML = `Results (${labelSet.unit}) <span class="chip">P90 / P50 / P10</span>`;
+    const metricNameEl_gv = document.getElementById('metric-name');
+    const metricNameRecEl_gv = document.getElementById('metric-name-rec');
+    if (metricNameEl_gv) metricNameEl_gv.textContent = labelSet.primary;
+    if (metricNameRecEl_gv) metricNameRecEl_gv.textContent = labelSet.metricRec;
+    const formulaEl_gv = document.getElementById('formula-note');
+    if (formulaEl_gv) formulaEl_gv.innerHTML = labelSet.formula;
+
+    const fmt_gv = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+    const quantiles_gv = arr => {
+      const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+      return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
+    };
+    const [P90_gv, P50_gv, P10_gv] = quantiles_gv(primary), [RP90_gv, RP50_gv, RP10_gv] = quantiles_gv(rec);
+    document.querySelector('.s-p90').textContent = fmt_gv(P90_gv);
+    document.querySelector('.s-p50').textContent = fmt_gv(P50_gv);
+    document.querySelector('.s-p10').textContent = fmt_gv(P10_gv);
+    const percentile_gv = (arr, x) => {
       const s = Array.from(arr).filter(Number.isFinite).sort((a,b)=>a-b);
       if (s.length === 0 || !Number.isFinite(x)) return NaN;
       let lo = 0, hi = s.length - 1;
       while (lo <= hi) { const mid = (lo + hi) >> 1; if (s[mid] < x) lo = mid + 1; else hi = mid - 1; }
-      const idx = lo; // first index >= x
-      return idx < s.length ? (idx + 1) / s.length : 1;
+      const idx = lo; return idx < s.length ? (idx + 1) / s.length : 1;
     };
-    const pDetMain = percentile(primary, detMidCase);
-    const pValMain = Number.isFinite(pDetMain) ? Math.max(0, Math.min(100, Math.round((1 - pDetMain) * 100))) : NaN;
-    document.querySelector('.s-mid').textContent = Number.isFinite(pValMain) ? `${fmt(detMidCase)} (P${pValMain})` : fmt(detMidCase);
-    document.querySelector('.r-p90').textContent = fmt(RP90);
-    document.querySelector('.r-p50').textContent = fmt(RP50);
-    document.querySelector('.r-p10').textContent = fmt(RP10);
-    const pDetRec = percentile(rec, detRecMidCase);
-    const pValRec = Number.isFinite(pDetRec) ? Math.max(0, Math.min(100, Math.round((1 - pDetRec) * 100))) : NaN;
-    document.querySelector('.r-mid').textContent = Number.isFinite(pValRec) ? `${fmt(detRecMidCase)} (P${pValRec})` : fmt(detRecMidCase);
-        // Plots
-        const config = {
-            displayModeBar: true,
-            responsive: true,
-            toImageButtonOptions: {format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3}
-        };
-    function baseLayout(title, x, y) {
-            return {
-                autosize: true,
-                title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'},
-                paper_bgcolor: '#fff',
-                plot_bgcolor: '#fff',
-        margin: {t: 86, l: 90, r: 46, b: 70},
-                xaxis: {
-          title: {text: x, standoff: 10},
-                    gridcolor: "#EFEFEF",
-                    color: "#374151",
-                    ticks: 'outside',
-                    ticklen: 6,
-                    tickwidth: 1,
-                    tickcolor: '#e5e7eb',
-          titlefont: {size: 15},
-          tickfont: {size: 13},
-          automargin: true
-                },
-                yaxis: {
-                    title: y,
-                    gridcolor: "#EFEFEF",
-                    color: "#374151",
-                    ticks: 'outside',
-                    ticklen: 6,
-                    tickwidth: 1,
-                    tickcolor: '#e5e7eb',
-                    titlefont: {size: 15},
-                    tickfont: {size: 13},
-                    fixedrange: true
-                },
-                hoverlabel: {font: {size: 12}},
-                showlegend: false
-            };
-        }
-        function cdf(arr) {
-            const s = Array.from(arr).sort((a, b) => a - b), y = s.map((_, i) => (i + 1) / s.length);
-            return {x: s, y};
-        }
-        const cMain = cdf(primary), cRec = cdf(rec);
+    const pDetMain_gv = percentile_gv(primary, detMidCase);
+    const pValMain_gv = Number.isFinite(pDetMain_gv) ? Math.max(0, Math.min(100, Math.round((1 - pDetMain_gv) * 100))) : NaN;
+    document.querySelector('.s-mid').textContent = Number.isFinite(pValMain_gv) ? `${fmt_gv(detMidCase)} (P${pValMain_gv})` : fmt_gv(detMidCase);
+    document.querySelector('.r-p90').textContent = fmt_gv(RP90_gv);
+    document.querySelector('.r-p50').textContent = fmt_gv(RP50_gv);
+    document.querySelector('.r-p10').textContent = fmt_gv(RP10_gv);
+    const pDetRec_gv = percentile_gv(rec, detRecMidCase);
+    const pValRec_gv = Number.isFinite(pDetRec_gv) ? Math.max(0, Math.min(100, Math.round((1 - pDetRec_gv) * 100))) : NaN;
+    document.querySelector('.r-mid').textContent = Number.isFinite(pValRec_gv) ? `${fmt_gv(detRecMidCase)} (P${pValRec_gv})` : fmt_gv(detRecMidCase);
+
+    const config_gv = { displayModeBar: true, responsive: true, toImageButtonOptions: {format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3} };
+    function baseLayout_gv(title, x, y) {
+      return { autosize: true, title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'}, paper_bgcolor: '#fff', plot_bgcolor: '#fff', margin: {t: 86, l: 90, r: 46, b: 70}, xaxis: { title: {text: x, standoff: 10}, gridcolor: '#EFEFEF', color: '#374151', ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', titlefont: {size: 15}, tickfont: {size: 13}, automargin: true }, yaxis: { title: y, gridcolor: '#EFEFEF', color: '#374151', ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', titlefont: {size: 15}, tickfont: {size: 13}, fixedrange: true }, hoverlabel: {font: {size: 12}}, showlegend: false };
+    }
+    function cdf_gv(arr){ const s = Array.from(arr).sort((a,b)=>a-b), y = s.map((_,i)=>(i+1)/s.length); return {x:s, y}; }
+    const cMain_gv = cdf_gv(primary), cRec_gv = cdf_gv(rec);
     Plotly.newPlot('cdf-main', [
-            {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-            {
-                x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
-                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
-                text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
-                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
-            },
-            {
-                x: [detMidCase],
-                y: [cMain.y[cMain.x.findIndex(xx => xx >= detMidCase)]],
-                mode: 'markers+text',
-                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(detMidCase)}`],
-                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
-            }
-  ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config);
-        // Histogram
-        const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
-        const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
-    function histogram(arr, tgt, title, xlabel, marks, mid) {
-            const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
-      Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency (count)'), config)
-                .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
-        }
-        histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
-        Plotly.newPlot('cdf-rec', [
-            {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-            {
-                x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
-                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
-                text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
-                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
-            },
-            {
-                x: [detRecMidCase],
-                y: [cRec.y[cRec.x.findIndex(xx => xx >= detRecMidCase)]],
-                mode: 'markers+text',
-                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
-                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
-            }
-  ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config);
-  histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
-  // Tornado chart for oil/gas with unit-aware axis
-  const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
-  plotTornado(tornadoData, labelSet.unit);
-        return;
-    } else if (fluid === 'oil' || fluid === 'gas') {
+      {x: cMain_gv.x, y: cMain_gv.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      { x: [P90_gv, P50_gv, P10_gv], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_gv(P90_gv)}`, `P50=${fmt_gv(P50_gv)}`, `P10=${fmt_gv(P10_gv)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
+      { x: [detMidCase], y: [cMain_gv.y[cMain_gv.x.findIndex(xx=>xx>=detMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_gv(detMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+    ], baseLayout_gv(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config_gv);
+    const vLines_gv = xs => xs.map(x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'#ED1C24'}}));
+    const midLine_gv = x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'var(--mid)'}});
+    function histogram_gv(arr, tgt, title, xlabel, marks, mid){ const trace={x:Array.from(arr), type:'histogram', nbinsx: nbins, marker:{color:'var(--blue-light)', line:{width:0.8, color:'var(--blue-stroke)'}}}; Plotly.newPlot(tgt, [trace], baseLayout_gv(title, xlabel, 'Frequency (count)'), config_gv).then(gd=>Plotly.relayout(gd,{shapes:[...vLines_gv(marks), midLine_gv(mid)]})); }
+    histogram_gv(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90_gv, P50_gv, P10_gv], primary[Math.floor(n / 2)]);
+    Plotly.newPlot('cdf-rec', [
+      {x: cRec_gv.x, y: cRec_gv.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      { x: [RP90_gv, RP50_gv, RP10_gv], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_gv(RP90_gv)}`, `P50=${fmt_gv(RP50_gv)}`, `P10=${fmt_gv(RP10_gv)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
+      { x: [detRecMidCase], y: [cRec_gv.y[cRec_gv.x.findIndex(xx=>xx>=detRecMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_gv(detRecMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+    ], baseLayout_gv(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config_gv);
+    histogram_gv(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90_gv, RP50_gv, RP10_gv], rec[Math.floor(n / 2)]);
+  const tornadoData_gv = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
+  plotTornado(tornadoData_gv, labelSet.unit);
+  wireSyncedZoom();
+    return;
+  } else if (fluid === 'oil' || fluid === 'gas') {
         A = new Float64Array(n);
         H = new Float64Array(n);
         NTG = new Float64Array(n);
@@ -1523,6 +1626,7 @@ function runSimulation() {
   // Tornado chart for oil/gas
   const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
   plotTornado(tornadoData, labelSet.unit);
+  wireSyncedZoom();
         return;
     }
 }
@@ -1541,7 +1645,7 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
     return {low: conv[0], high: conv[2]};
   }
     const baseRF = mostLikely(rfType, rfRaw, rfPerc);
-  function getBaseRs() {
+    function getBaseRs() {
     if (fluid === 'oilgas') return mostLikely(params[6].type, params[6].v, params[6].wPerc);
         return NaN;
     }
@@ -1550,13 +1654,21 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
     if (fluid === 'oil') return mostLikely(params[5].type, params[5].v, params[5].wPerc);
         return NaN;
     }
+    function getBaseRv(){
+      if (fluid === 'gasvo') return mostLikely(params[6].type, params[6].v, params[6].wPerc);
+      return NaN;
+    }
+    function getBaseBg(){
+      if (fluid === 'gas' || fluid==='gasvo') return mostLikely(params[5].type, params[5].v, params[5].wPerc);
+      return NaN;
+    }
     let base;
     if (fluid === 'oil') {
         base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
-    } else if (fluid === 'gas') {
+  } else if (fluid === 'gas') {
     // Gas in BCF
     base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e9;
-    } else if (fluid === 'oilgas') {
+  } else if (fluid === 'oilgas') {
         if (metric === 'stoiip') {
             base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
         } else if (metric === 'giip') {
@@ -1568,10 +1680,30 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
   const detGiipBOE = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 5.8e9;
       base = detStoiip + detGiipBOE;
         }
+    } else if (fluid === 'gasvo') {
+        if (metric === 'giip') {
+          base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBaseBg()) / 1e9;
+        } else if (metric === 'vo') {
+          base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRv() / getBaseBg()) / 1e6;
+        } else { // total MMBOE = GIIP(MMBOE)+VO(MMBO)
+          const detGiipMMBOE = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBaseBg()) / 5.8e9;
+          const detVoMMBO = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRv() / getBaseBg()) / 1e6;
+          base = detGiipMMBOE + detVoMMBO;
+        }
     }
-    const paramNames = params.map(p => p.name);
+    // Decide which parameters to include in the tornado based on selected metric
+    const includeIdx = [];
+    for (let i = 0; i < params.length; i++) {
+      const pName = params[i].name;
+      // Hide Rv when showing gas-only (GIIP) for Gas + Vaporized Oil
+      if (fluid === 'gasvo' && metric === 'giip' && pName === 'Rv') continue;
+      // Hide Rs when showing oil-only (STOIIP) for Oil + Solution Gas
+      if (fluid === 'oilgas' && metric === 'stoiip' && pName === 'Rs') continue;
+      includeIdx.push(i);
+    }
+    const paramNames = includeIdx.map(i => params[i].name);
     const bars = [];
-    for (let idx = 0; idx < params.length; idx++) {
+    for (const idx of includeIdx) {
         const {low, high} = getLowHigh(idx);
         let lowVal, highVal;
         if (fluid === 'oil') {
@@ -1581,7 +1713,7 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
       // Gas in BCF
       lowVal = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e9;
       highVal = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e9;
-        } else if (fluid === 'oilgas') {
+  } else if (fluid === 'oilgas') {
             if (metric === 'stoiip') {
                 lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
                 highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
@@ -1589,7 +1721,7 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
         // Solution gas in BCF
         lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 1e9;
         highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 1e9;
-            } else {
+      } else {
                 const detStoiipLow = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
   // Solution gas to MMBOE for total (divide scf by 5.8e9)
   const detGiipLowBOE = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 5.8e9;
@@ -1597,7 +1729,23 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
                 const detStoiipHigh = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
   const detGiipHighBOE = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 5.8e9;
         highVal = detStoiipHigh + detGiipHighBOE;
-            }
+      }
+    } else if (fluid === 'gasvo') {
+      if (metric === 'giip') {
+        lowVal = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBaseBg())) / 1e9;
+        highVal = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBaseBg())) / 1e9;
+      } else if (metric === 'vo') {
+        const voLow = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRv()) / (idx === 5 ? low : getBaseBg())) / 1e6;
+        const voHigh = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRv()) / (idx === 5 ? high : getBaseBg())) / 1e6;
+        lowVal = voLow; highVal = voHigh;
+      } else { // total MMBOE
+        const giipLowMMBOE = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBaseBg())) / 5.8e9;
+        const giipHighMMBOE = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBaseBg())) / 5.8e9;
+        const voLow = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRv()) / (idx === 5 ? low : getBaseBg())) / 1e6;
+        const voHigh = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRv()) / (idx === 5 ? high : getBaseBg())) / 1e6;
+        lowVal = giipLowMMBOE + voLow;
+        highVal = giipHighMMBOE + voHigh;
+      }
         }
         bars.push({
             name: paramNames[idx],
@@ -1688,13 +1836,25 @@ function wireSyncedZoom(){
   const ids=['cdf-main','hist-main','cdf-rec','hist-rec'];
   ids.forEach(id=>{
     const gd=document.getElementById(id);
+    if(!gd || typeof gd.on !== 'function') return;
+    // Avoid attaching duplicate listeners across runs
+    if (gd.__syncedZoomAttached) return;
+    gd.__syncedZoomAttached = true;
     gd.on('plotly_relayout',(ev)=>{
       if(syncing) return;
-      const r0=ev['xaxis.range[0]'], r1=ev['xaxis.range[1]'];
-      if(r0!==undefined && r1!==undefined){
+      const hasR0 = Object.prototype.hasOwnProperty.call(ev, 'xaxis.range[0]');
+      const hasR1 = Object.prototype.hasOwnProperty.call(ev, 'xaxis.range[1]');
+      const hasAuto = Object.prototype.hasOwnProperty.call(ev, 'xaxis.autorange');
+      if((hasR0 && hasR1) || hasAuto){
         syncing=true;
-        Promise.all(ids.filter(x=>x!==id).map(other=>Plotly.relayout(other, {'xaxis.range':[r0,r1]})))
-          .finally(()=>syncing=false);
+        const updates = ids.filter(x=>x!==id).map(other => {
+          if (hasAuto) {
+            return Plotly.relayout(other, {'xaxis.autorange': ev['xaxis.autorange']});
+          } else {
+            return Plotly.relayout(other, {'xaxis.range':[ev['xaxis.range[0]'], ev['xaxis.range[1]']]});
+          }
+        });
+        Promise.all(updates).finally(()=>syncing=false);
       }
     });
   });
