@@ -365,7 +365,7 @@
 
       <h3 id="quickstart">2) Quick start</h3>
       <ol>
-        <li>Select <b>Fluid</b>: Oil or Gas (units & formula update automatically).</li>
+        <li>Select <b>Fluid</b>: Oil, Gas, or <b>Oil + Solution Gas</b> (units & formula update automatically).</li>
         <li>Choose units for <b>Area</b> and <b>Thickness</b>.</li>
         <li>For each parameter (Area, Thickness, NTG, Porosity, Water Saturation, Bo/Bg), choose a <b>Distribution</b> (Normal, Triangular, PERT, Uniform, Known, Discrete) and provide its parameters. Small labels above each box guide what to enter (e.g., Mean/Std Dev or Min/Mode/Max).</li>
         <li>Set the <b>Recovery Factor</b> distribution if needed.</li>
@@ -377,7 +377,7 @@
         <li><b>Area</b>: m², km², acres, ft² (internally converted to acres).</li>
         <li><b>Thickness</b>: m or ft (internally converted to ft).</li>
         <li><b>NTG</b>, <b>Porosity</b>, <b>Water Saturation</b> are treated as <b>fractions</b> (0–1). Previews display in % for readability.</li>
-        <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas.</li>
+        <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas; <b>Rs</b> (scf/bbl) when <b>Oil + Solution Gas</b> is selected.</li>
       </ul>
 
       <h3 id="dists">4) Distributions</h3>
@@ -400,11 +400,14 @@
       <ul>
         <li><b>Oil (STOIIP):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (Bo in RB/STB) → plots in MMBO</li>
         <li><b>Gas (GIIP):</b> <code>43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (Bg in scf/SCF) → plots in BCF</li>
+        <li><b>Solution gas (GIIP from oil):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF) → plots in BCF</li>
+        <li><b>Total (MMBOE):</b> <code>STOIIP (MMBO) + GIIP<sub>sg</sub> (MMBOE)</code>, where <code>GIIP<sub>sg</sub> (MMBOE) = SCF / 5.8e9</code> (equivalently <code>BCF / 5.8</code> using 5.8 Mscf per BOE)</li>
       </ul>
       <p>Recoverable volume = In-place × RF. P10/P50/P90 are computed from the empirical CDF of simulated samples. Deterministic mid-case uses the most likely input values (Normal→mean; Triangular/PERT→mode; Uniform→midpoint; Known→P50; Discrete→highest‑weighted value — equal weights if blank).</p>
 
       <h3 id="outputs">7) Outputs</h3>
       <ul>
+        <li><b>Results metric</b> (Oil + Solution Gas only): Choose <b>STOIIP (MMBO)</b>, <b>GIIP (BCF)</b>, or <b>Total (MMBOE)</b>. All plots, the tornado axis, and the results table follow the selected unit.</li>
         <li><b>In‑place & Recoverable CDFs</b> with red markers at P90/P50/P10 and a purple diamond for the deterministic mid‑case.</li>
         <li><b>Histograms</b> with vertical markers for P90/P50/P10 and deterministic mid‑case.</li>
         <li><b>Tornado sensitivity</b> shows impact of low/high changes in each input vs deterministic mid‑case. Green = upside, Red = downside.</li>
@@ -413,7 +416,7 @@
       </ul>
 
       <h3 id="tornado-help">8) Tornado sensitivity</h3>
-      <p>Computed by changing one parameter at a time from its “low” to “high” while others are fixed at base (deterministic mid‑case; weight‑aware for Discrete). Low/High are taken from distribution definitions: Normal = mean±1.28σ; Triangular/PERT/Uniform = Min/Max; Known = P90/P10; Discrete = min/max of values. Bars are:</p>
+  <p>Computed by changing one parameter at a time from its “low” to “high” while others are fixed at base (deterministic mid‑case; weight‑aware for Discrete). Low/High are taken from distribution definitions: Normal = mean±1.28σ; Triangular/PERT/Uniform = Min/Max; Known = P90/P10; Discrete = min/max of values. Axis units follow the selected metric (MMBO, BCF, or MMBOE). Bars are:</p>
       <ul>
         <li><span style="color:var(--up)">Green</span> for positive Δ (upside),</li>
         <li><span style="color:var(--down)">Red</span> for negative Δ (downside).</li>
@@ -443,6 +446,7 @@
         <li><b>NTG</b>: Net to Gross. <b>φ</b>: Porosity. <b>Sw</b>: Water saturation.</li>
         <li><b>PERT</b>: Beta‑PERT distribution (λ=4) defined by Min, Mode, Max; smoother alternative to Triangular.</li>
         <li><b>Bg</b>: Gas formation volume factor in scf/SCF (reservoir cubic feet per standard cubic foot).</li>
+        <li><b>Rs</b>: Solution gas‑oil ratio in scf/bbl.</li>
       </ul>
 
       <div class="manual-footer">
@@ -1131,8 +1135,9 @@ function runSimulation() {
       stoiipMMBO[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
       // Solution gas volume in BCF (scf -> BCF)
       giipBCF[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 1e9;
-      // Gas in BOE (for total), using 5.8 Mscf per BOE
-      giipBOE[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e6;
+  // Gas in MMBOE (for total): convert scf to BOE using 5.8 Mscf/BOE,
+  // then to MMBOE (divide by 1e6) -> overall divide scf by 5.8e9
+  giipBOE[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e9;
       totalMMBOE[i] = stoiipMMBO[i] + giipBOE[i];
         }
         let primary, rec, labelSet, detMidCase, detRecMidCase;
@@ -1167,7 +1172,7 @@ function runSimulation() {
         * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
         / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e9;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
-        } else {
+    } else {
       primary = totalMMBOE;
       rec = totalMMBOE.map((v, i) => v * RF[i]);
       labelSet = {
@@ -1182,16 +1187,25 @@ function runSimulation() {
         * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
         * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
         / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
-      const detGiipBOE = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
+  const detGiipBOE = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
         * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
         * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
         * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
         * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
         * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
-        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 5.8e6;
+  / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 5.8e9;
       detMidCase = detStoiip + detGiipBOE;
             detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         }
+    // Ensure the Results header and metric labels reflect the current metric and unit (MMBO, BCF, or MMBOE)
+    const resHdr = document.getElementById('results-title');
+    if (resHdr) resHdr.innerHTML = `Results (${labelSet.unit}) <span class="chip">P90 / P50 / P10</span>`;
+    const metricNameEl = document.getElementById('metric-name');
+    const metricNameRecEl = document.getElementById('metric-name-rec');
+    if (metricNameEl) metricNameEl.textContent = labelSet.primary;
+    if (metricNameRecEl) metricNameRecEl.textContent = labelSet.metricRec;
+    const formulaEl = document.getElementById('formula-note');
+    if (formulaEl) formulaEl.innerHTML = labelSet.formula;
         // Table
         const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
         const quantiles = arr => {
@@ -1550,8 +1564,8 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
       base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 1e9;
         } else {
             const detStoiip = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
-      // Convert solution gas to BOE for total (5.8 Mscf/BOE)
-      const detGiipBOE = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 5.8e6;
+  // Convert solution gas to MMBOE for total (5.8 Mscf/BOE -> divide scf by 5.8e9)
+  const detGiipBOE = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 5.8e9;
       base = detStoiip + detGiipBOE;
         }
     }
@@ -1577,11 +1591,11 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
         highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 1e9;
             } else {
                 const detStoiipLow = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
-        // Solution gas to BOE for total
-        const detGiipLowBOE = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 5.8e6;
+  // Solution gas to MMBOE for total (divide scf by 5.8e9)
+  const detGiipLowBOE = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 5.8e9;
         lowVal = detStoiipLow + detGiipLowBOE;
                 const detStoiipHigh = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
-        const detGiipHighBOE = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 5.8e6;
+  const detGiipHighBOE = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 5.8e9;
         highVal = detStoiipHigh + detGiipHighBOE;
             }
         }
