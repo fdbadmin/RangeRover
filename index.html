@@ -1338,18 +1338,18 @@ function runSimulation() {
         Plotly.newPlot('cdf-main', [
           {x: cMain_og.x, y: cMain_og.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
           { x: [P90_og, P50_og, P10_og], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_og(P90_og)}`, `P50=${fmt_og(P50_og)}`, `P10=${fmt_og(P10_og)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
-          { x: [detMidCase], y: [cMain_og.y[cMain_og.x.findIndex(xx=>xx>=detMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_og(detMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+          { x: [detMidCase], y: [pDetMain_og], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_og(detMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
         ], baseLayout_og(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config_og);
         const vLines_og = xs => xs.map(x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'#ED1C24'}}));
         const midLine_og = x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'var(--mid)'}});
-        function histogram_og(arr, tgt, title, xlabel, marks, mid){ const trace={x:Array.from(arr), type:'histogram', nbinsx: nbins, marker:{color:'var(--blue-light)', line:{width:0.8, color:'var(--blue-stroke)'}}}; Plotly.newPlot(tgt, [trace], baseLayout_og(title, xlabel, 'Frequency (count)'), config_og).then(gd=>Plotly.relayout(gd,{shapes:[...vLines_og(marks), midLine_og(mid)]})); }
-        histogram_og(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90_og, P50_og, P10_og], primary[Math.floor(n / 2)]);
+  function histogram_og(arr, tgt, title, xlabel, marks, mid){ const trace={x:Array.from(arr), type:'histogram', nbinsx: nbins, marker:{color:'var(--blue-light)', line:{width:0.8, color:'var(--blue-stroke)'}}}; Plotly.newPlot(tgt, [trace], baseLayout_og(title, xlabel, 'Frequency (count)'), config_og).then(gd=>Plotly.relayout(gd,{shapes:[...vLines_og(marks), midLine_og(mid)]})); }
+  histogram_og(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90_og, P50_og, P10_og], detMidCase);
         Plotly.newPlot('cdf-rec', [
           {x: cRec_og.x, y: cRec_og.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
           { x: [RP90_og, RP50_og, RP10_og], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_og(RP90_og)}`, `P50=${fmt_og(RP50_og)}`, `P10=${fmt_og(RP10_og)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
-          { x: [detRecMidCase], y: [cRec_og.y[cRec_og.x.findIndex(xx=>xx>=detRecMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_og(detRecMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+          { x: [detRecMidCase], y: [pDetRec_og], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_og(detRecMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
         ], baseLayout_og(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config_og);
-        histogram_og(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90_og, RP50_og, RP10_og], rec[Math.floor(n / 2)]);
+        histogram_og(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90_og, RP50_og, RP10_og], detRecMidCase);
   const tornadoData_og = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
   plotTornado(tornadoData_og, labelSet.unit);
   wireSyncedZoom();
@@ -1503,18 +1503,18 @@ function runSimulation() {
     Plotly.newPlot('cdf-main', [
       {x: cMain_gv.x, y: cMain_gv.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
       { x: [P90_gv, P50_gv, P10_gv], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_gv(P90_gv)}`, `P50=${fmt_gv(P50_gv)}`, `P10=${fmt_gv(P10_gv)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
-      { x: [detMidCase], y: [cMain_gv.y[cMain_gv.x.findIndex(xx=>xx>=detMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_gv(detMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+      { x: [detMidCase], y: [pDetMain_gv], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_gv(detMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
     ], baseLayout_gv(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config_gv);
     const vLines_gv = xs => xs.map(x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'#ED1C24'}}));
     const midLine_gv = x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'var(--mid)'}});
-    function histogram_gv(arr, tgt, title, xlabel, marks, mid){ const trace={x:Array.from(arr), type:'histogram', nbinsx: nbins, marker:{color:'var(--blue-light)', line:{width:0.8, color:'var(--blue-stroke)'}}}; Plotly.newPlot(tgt, [trace], baseLayout_gv(title, xlabel, 'Frequency (count)'), config_gv).then(gd=>Plotly.relayout(gd,{shapes:[...vLines_gv(marks), midLine_gv(mid)]})); }
-    histogram_gv(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90_gv, P50_gv, P10_gv], primary[Math.floor(n / 2)]);
+  function histogram_gv(arr, tgt, title, xlabel, marks, mid){ const trace={x:Array.from(arr), type:'histogram', nbinsx: nbins, marker:{color:'var(--blue-light)', line:{width:0.8, color:'var(--blue-stroke)'}}}; Plotly.newPlot(tgt, [trace], baseLayout_gv(title, xlabel, 'Frequency (count)'), config_gv).then(gd=>Plotly.relayout(gd,{shapes:[...vLines_gv(marks), midLine_gv(mid)]})); }
+  histogram_gv(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90_gv, P50_gv, P10_gv], detMidCase);
     Plotly.newPlot('cdf-rec', [
       {x: cRec_gv.x, y: cRec_gv.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
       { x: [RP90_gv, RP50_gv, RP10_gv], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_gv(RP90_gv)}`, `P50=${fmt_gv(RP50_gv)}`, `P10=${fmt_gv(RP10_gv)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
-      { x: [detRecMidCase], y: [cRec_gv.y[cRec_gv.x.findIndex(xx=>xx>=detRecMidCase)]], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_gv(detRecMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+      { x: [detRecMidCase], y: [pDetRec_gv], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_gv(detRecMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
     ], baseLayout_gv(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config_gv);
-    histogram_gv(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90_gv, RP50_gv, RP10_gv], rec[Math.floor(n / 2)]);
+    histogram_gv(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90_gv, RP50_gv, RP10_gv], detRecMidCase);
   const tornadoData_gv = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
   plotTornado(tornadoData_gv, labelSet.unit);
   wireSyncedZoom();
@@ -1686,50 +1686,50 @@ function runSimulation() {
             return {x: s, y};
         }
         const cMain = cdf(primary), cRec = cdf(rec);
-        Plotly.newPlot('cdf-main', [
-            {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-            {
-                x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
-                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
-                text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
-                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
-            },
-            {
-                x: [detMidCase],
-                y: [cMain.y[cMain.x.findIndex(xx => xx >= detMidCase)]],
-                mode: 'markers+text',
-                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(detMidCase)}`],
-                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
-            }
+    Plotly.newPlot('cdf-main', [
+      {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      {
+        x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+        marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+        text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
+        textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+      },
+      {
+        x: [detMidCase],
+        y: [pDetMain2],
+        mode: 'markers+text',
+        marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+        text: [`Det. Mid Case=${fmt(detMidCase)}`],
+        textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+      }
   ], baseLayout(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config);
         // Histogram
         const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
         const midLine = x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: 'var(--mid)'}});
-        function histogram(arr, tgt, title, xlabel, marks, mid) {
-            const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
+  function histogram(arr, tgt, title, xlabel, marks, mid) {
+      const trace = {x: Array.from(arr), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
       Plotly.newPlot(tgt, [trace], baseLayout(title, xlabel, 'Frequency (count)'), config)
-                .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
-        }
-        histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], primary[Math.floor(n / 2)]);
-        Plotly.newPlot('cdf-rec', [
-            {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-            {
-                x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
-                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
-                text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
-                textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
-            },
-            {
-                x: [detRecMidCase],
-                y: [cRec.y[cRec.x.findIndex(xx => xx >= detRecMidCase)]],
-                mode: 'markers+text',
-                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
-                text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
-                textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
-            }
+    .then(gd => Plotly.relayout(gd, {shapes: [...vLines(marks), midLine(mid)]}));
+  }
+  histogram(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90, P50, P10], detMidCase);
+    Plotly.newPlot('cdf-rec', [
+      {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      {
+        x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+        marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+        text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
+        textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+      },
+      {
+        x: [detRecMidCase],
+        y: [pDetRec2],
+        mode: 'markers+text',
+        marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+        text: [`Det. Mid Case=${fmt(detRecMidCase)}`],
+        textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip'
+      }
   ], baseLayout(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config);
-  histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], rec[Math.floor(n / 2)]);
+  histogram(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90, RP50, RP10], detRecMidCase);
   // Tornado chart for oil/gas
   const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
   plotTornado(tornadoData, labelSet.unit);
