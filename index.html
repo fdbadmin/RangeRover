@@ -472,16 +472,28 @@ let syncing = false;
 /* ===== Units ===== */
 const AREA_FACTORS = { m2: 0.000247105, km2: 247.105, acres: 1.0, ft2: 2.2957e-5 };
 const THICK_FACTORS = { m: 3.28084, ft: 1.0 };
+// GRV unit factors to acre-ft (input scales)
+// - 'acre-ft' is interpreted as 10^6 acre-ft (millions of acre-feet)
+// - 'ft^3'    is interpreted as 10^9 ft^3 (billions of cubic feet)
+// - 'm^3'     is interpreted as 10^6 m^3 (millions of cubic meters)
+// Base conversions: 1 acre-ft = 43,560 ft^3 ; 1 acre-ft = 1233.48184 m^3
+const GRV_FACTORS = {
+  'acre-ft': 1e6,                 // 10^6 acre-ft → acre-ft
+  'ft^3':    (1e9/43560),         // 10^9 ft^3 → acre-ft
+  'm^3':     (1e6/1233.48184)     // 10^6 m^3 → acre-ft
+};
 
 /* ===== Fluid configs ===== */
 function paramsFor(fluid){
+  const geom = geometryMode();
+  const geomParams = (geom==='grv') ? [{name:"GRV"}] : [{name:"Area"},{name:"Thickness"}];
   if(fluid==='gas')
-    return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true}];
+    return [...geomParams,{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true}];
   if(fluid==='oilgas')
-    return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true},{name:"Rs",pos:true}];
+    return [...geomParams,{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true},{name:"Rs",pos:true}];
   if(fluid==='gasvo')
-    return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true},{name:"Rv",pos:true}];
-  return [{name:"Area"},{name:"Thickness"},{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true}];
+    return [...geomParams,{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true},{name:"Rv",pos:true}];
+  return [...geomParams,{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true}];
 }
 function labelsFor(fluid){
   if(fluid==='gas'){
@@ -546,7 +558,7 @@ function isFrac(name){return ["Net to Gross","Porosity","Water Saturation","Reco
 
 /* ===== Proper truncation ===== */
 function boundsFor(name,fluid){
-  if(name==='Area' || name==='Thickness') return {min:1e-9, max:Infinity};
+  if(name==='Area' || name==='Thickness' || name==='GRV') return {min:1e-9, max:Infinity};
   if(isFrac(name)) return {min:0, max:1};
   if(name==='Bo') return {min:1.0, max:Infinity};
   if(name==='Bg') return {min:1e-9, max:Infinity};
@@ -562,6 +574,7 @@ function sampleNormalTrunc(r, mean, std, min, max){
 const FLUID = document.getElementById('fluid');
 const AREA = document.getElementById('areaUnit');
 const THICK = document.getElementById('thicknessUnit');
+let GRV_UNIT = null; // set by mountGeometrySelector
 let PARAMS = paramsFor('oil');
 
 const DIST_LABELS = {
@@ -578,6 +591,7 @@ function xLabelFor(name){
   if(isFrac(name)) return 'Percent (%)';
   if(name==='Area') return AREA.options[AREA.selectedIndex].text;
   if(name==='Thickness') return THICK.options[THICK.selectedIndex].text;
+  if(name==='GRV'){ const sel = document.getElementById('grvUnit'); return sel ? sel.options[sel.selectedIndex].text : 'acre-ft'; }
   if(name==='Bo') return 'RB/STB';
   if(name==='Bg') return 'scf/SCF';
   if(name==='Rs') return 'scf/bbl';
@@ -755,7 +769,49 @@ function mountResultsTypeSelector(){
     sel.addEventListener('change', runSimulation);
   }
 }
+// Geometry selector: Area×Thickness or GRV
+function geometryMode(){ const sel=document.getElementById('geometryMode'); return sel ? sel.value : 'area-thickness'; }
+function mountGeometrySelector(){
+  const formGrid = document.querySelector('.form-grid');
+  if(!formGrid) return;
+  // Preserve existing selections (if any)
+  const existingGeomSel = document.getElementById('geometryMode');
+  const prevMode = existingGeomSel ? existingGeomSel.value : null;
+  const existingGrvSel = document.getElementById('grvUnit');
+  const prevGrvUnit = existingGrvSel ? existingGrvSel.value : null;
+  // Clean up any previous label/select pairs deterministically
+  const oldGeomLabel = formGrid.querySelector('label[for="geometryMode"]');
+  if (oldGeomLabel) oldGeomLabel.remove();
+  if (existingGeomSel) existingGeomSel.remove();
+  const oldGrvLabel = formGrid.querySelector('label[for="grvUnit"]');
+  if (oldGrvLabel) oldGrvLabel.remove();
+  if (existingGrvSel) existingGrvSel.remove();
+  // Build geometry selector
+  const label = document.createElement('label'); label.textContent='Geometry'; label.setAttribute('for','geometryMode');
+  const sel = document.createElement('select'); sel.id='geometryMode'; sel.innerHTML='<option value="area-thickness" selected>Area × Thickness</option><option value="grv">GRV</option>';
+  // Insert after thickness unit note if present
+  const thickUnit = document.getElementById('thicknessUnit');
+  let insertAfter = thickUnit;
+  if (thickUnit) {
+    let next = thickUnit.nextElementSibling; if (next && next.classList.contains('note')) insertAfter = next;
+  }
+  if (insertAfter && insertAfter.parentElement === formGrid) { insertAfter.insertAdjacentElement('afterend', label); label.insertAdjacentElement('afterend', sel); }
+  else { formGrid.appendChild(label); formGrid.appendChild(sel); }
+  // GRV unit selector (visible when GRV chosen)
+  const grvLabel = document.createElement('label'); grvLabel.textContent='GRV Units'; grvLabel.setAttribute('for','grvUnit');
+  const grvSel = document.createElement('select'); grvSel.id='grvUnit'; grvSel.innerHTML='<option value="acre-ft" selected>10^6 acre-ft</option><option value="ft^3">10^9 ft^3</option><option value="m^3">10^6 m^3</option>';
+  sel.insertAdjacentElement('afterend', grvLabel); grvLabel.insertAdjacentElement('afterend', grvSel);
+  // Restore previous selections if they existed
+  if (prevMode) sel.value = prevMode;
+  if (prevGrvUnit) grvSel.value = prevGrvUnit;
+  function toggleGRVUnits(){ const show = sel.value==='grv'; grvLabel.style.display = show?'' : 'none'; grvSel.style.display = show?'' : 'none'; }
+  sel.addEventListener('change', ()=>{ toggleGRVUnits(); updateFluidUI(); });
+  grvSel.addEventListener('change', ()=>{ renderDistPreviewsDebounced(); });
+  toggleGRVUnits();
+}
 function updateFluidUI(){
+  // Ensure geometry controls are present and up-to-date before building params
+  mountGeometrySelector();
   PARAMS=paramsFor(FLUID.value);
   mountParams();
   labelsAndFormula();
@@ -800,6 +856,7 @@ function convTriplet(name, arr){
   const t=arr.slice();
   if(name==='Area'){const f=AREA_FACTORS[AREA.value]; for(let i=0;i<t.length;i++) if(!Number.isNaN(t[i])) t[i]*=f;}
   if(name==='Thickness'){const f=THICK_FACTORS[THICK.value]; for(let i=0;i<t.length;i++) if(!Number.isNaN(t[i])) t[i]*=f;}
+  if(name==='GRV'){ const u=document.getElementById('grvUnit'); const key=u?u.value:'acre-ft'; const f=GRV_FACTORS[key]||1; for(let i=0;i<t.length;i++) if(!Number.isNaN(t[i])) t[i]*=f; }
   return t;
 }
 
@@ -831,6 +888,7 @@ function discreteValsAndWeights(rawVals, weightPercents){
 function renderDistPreviewsDebounced(){ clearTimeout(previewTimer); previewTimer=setTimeout(renderDistPreviews, 180); }
 AREA.addEventListener('change', renderDistPreviewsDebounced);
 THICK.addEventListener('change', renderDistPreviewsDebounced);
+document.addEventListener('change', (e)=>{ if(e.target && e.target.id==='grvUnit') renderDistPreviewsDebounced(); });
 
 function renderDistPreviews(){
   const grid=document.getElementById('previewGrid'); grid.innerHTML='';
@@ -1098,13 +1156,23 @@ function runSimulation() {
     }
 
     const n = iters;
-  let A, H, NTG, PHI, SW, Bo, Bg, Rs, Rv, RF;
+  let A, H, GRV, NTG, PHI, SW, Bo, Bg, Rs, Rv, RF;
     let detMidCase;
     let metric = null;
+  const useGRV = geometryMode() === 'grv';
   if (fluid === 'oilgas') {
         metric = resultType || 'total';
-        A = new Float64Array(n);
-        H = new Float64Array(n);
+  // Name-based indices to be robust across geometry modes
+  const idxOf = (nm) => dists.findIndex(p => p.name === nm);
+  const iGRV = idxOf('GRV');
+  const iArea = idxOf('Area');
+  const iThick = idxOf('Thickness');
+  const iNTG = idxOf('Net to Gross');
+  const iPHI = idxOf('Porosity');
+  const iSW = idxOf('Water Saturation');
+  const iBo = idxOf('Bo');
+  const iRs = idxOf('Rs');
+  if (useGRV) { GRV = new Float64Array(n); } else { A = new Float64Array(n); H = new Float64Array(n); }
         NTG = new Float64Array(n);
         PHI = new Float64Array(n);
         SW = new Float64Array(n);
@@ -1112,13 +1180,17 @@ function runSimulation() {
   Rs = new Float64Array(n);
         RF = new Float64Array(n);
         for (let i = 0; i < n; i++) {
-            A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
-            H[i] = drawOne(dists[1].type, dists[1].raw, dists[1].v, 'Thickness', dists[1].wPerc);
-            NTG[i] = drawOne(dists[2].type, dists[2].raw, dists[2].v, 'Net to Gross', dists[2].wPerc);
-            PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
-            SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
-            Bo[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bo', dists[5].wPerc);
-            Rs[i] = drawOne(dists[6].type, dists[6].raw, dists[6].v, 'Rs', dists[6].wPerc);
+            if (useGRV) {
+              GRV[i] = drawOne(dists[iGRV].type, dists[iGRV].raw, dists[iGRV].v, 'GRV', dists[iGRV].wPerc);
+            } else {
+              A[i] = drawOne(dists[iArea].type, dists[iArea].raw, dists[iArea].v, 'Area', dists[iArea].wPerc);
+              H[i] = drawOne(dists[iThick].type, dists[iThick].raw, dists[iThick].v, 'Thickness', dists[iThick].wPerc);
+            }
+            NTG[i] = drawOne(dists[iNTG].type, dists[iNTG].raw, dists[iNTG].v, 'Net to Gross', dists[iNTG].wPerc);
+            PHI[i] = drawOne(dists[iPHI].type, dists[iPHI].raw, dists[iPHI].v, 'Porosity', dists[iPHI].wPerc);
+            SW[i] = drawOne(dists[iSW].type, dists[iSW].raw, dists[iSW].v, 'Water Saturation', dists[iSW].wPerc);
+            Bo[i] = drawOne(dists[iBo].type, dists[iBo].raw, dists[iBo].v, 'Bo', dists[iBo].wPerc);
+            Rs[i] = drawOne(dists[iRs].type, dists[iRs].raw, dists[iRs].v, 'Rs', dists[iRs].wPerc);
             // Recovery Factor sampling (same as before)
             if (rfType === 'Discrete') {
                 const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
@@ -1152,16 +1224,21 @@ function runSimulation() {
   let giipBOE = new Float64Array(n);
   let totalMMBOE = new Float64Array(n);
         for (let i = 0; i < n; i++) {
+      const AH = useGRV ? GRV[i] : (A[i] * H[i]); // GRV in acre-ft already; A (acres) * H (ft)
       // Oil volume in MMBO
-      stoiipMMBO[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
+      stoiipMMBO[i] = (7758 * AH * NTG[i] * PHI[i] * (1 - SW[i]) / Bo[i]) / 1e6;
       // Solution gas volume in BCF (scf -> BCF)
-      giipBCF[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 1e9;
+      giipBCF[i] = (7758 * AH * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 1e9;
   // Gas in MMBOE (for total): convert scf to BOE using 5.8 Mscf/BOE,
   // then to MMBOE (divide by 1e6) -> overall divide scf by 5.8e9
-  giipBOE[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e9;
+  giipBOE[i] = (7758 * AH * NTG[i] * PHI[i] * (1 - SW[i]) * Rs[i] / Bo[i]) / 5.8e9;
       totalMMBOE[i] = stoiipMMBO[i] + giipBOE[i];
         }
   let primary, rec, labelSet, detMidCase, detRecMidCase;
+  // Deterministic geometry term used across metrics
+  const detGeom_og = useGRV
+    ? mostLikely(dists[iGRV].type, dists[iGRV].v, dists[iGRV].wPerc)
+    : (mostLikely(dists[iArea].type, dists[iArea].v, dists[iArea].wPerc) * mostLikely(dists[iThick].type, dists[iThick].v, dists[iThick].wPerc));
         if (metric === 'stoiip') {
       primary = stoiipMMBO;
       rec = stoiipMMBO.map((v, i) => v * RF[i]);
@@ -1170,12 +1247,11 @@ function runSimulation() {
                 cdfTitle: 'STOIIP CDF', histTitle: 'STOIIP Histogram', metricRec: 'Recoverable STOIIP',
                 formula: 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
             };
-      detMidCase = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
-        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
-        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
-        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
-        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
+      detMidCase = (7758 * detGeom_og
+        * mostLikely(dists[iNTG].type, dists[iNTG].v, dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type, dists[iPHI].v, dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type, dists[iSW].v, dists[iSW].wPerc))
+        / mostLikely(dists[iBo].type, dists[iBo].v, dists[iBo].wPerc)) / 1e6;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         } else if (metric === 'giip') {
       primary = giipBCF;
@@ -1185,13 +1261,12 @@ function runSimulation() {
         cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
         formula: 'Formula (Solution Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF; plots in BCF).'
             };
-      detMidCase = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
-        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
-        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
-        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
-        * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
-        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e9;
+      detMidCase = (7758 * detGeom_og
+        * mostLikely(dists[iNTG].type, dists[iNTG].v, dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type, dists[iPHI].v, dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type, dists[iSW].v, dists[iSW].wPerc))
+        * mostLikely(dists[iRs].type, dists[iRs].v, dists[iRs].wPerc)
+        / mostLikely(dists[iBo].type, dists[iBo].v, dists[iBo].wPerc)) / 1e9;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         } else {
       // total = STOIIP (MMBO) + GIIP (MMBOE)
@@ -1203,19 +1278,17 @@ function runSimulation() {
         formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
       };
       // Deterministic mid case for total is sum of deterministic STOIIP and GIIP (in MMBOE)
-      const detStoiip = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
-        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
-        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
-        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
-        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
-      const detGiipBOE = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
-        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
-        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
-        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
-        * mostLikely(dists[6].type, dists[6].v, dists[6].wPerc)
-        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 5.8e9;
+      const detStoiip = (7758 * detGeom_og
+        * mostLikely(dists[iNTG].type, dists[iNTG].v, dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type, dists[iPHI].v, dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type, dists[iSW].v, dists[iSW].wPerc))
+        / mostLikely(dists[iBo].type, dists[iBo].v, dists[iBo].wPerc)) / 1e6;
+      const detGiipBOE = (7758 * detGeom_og
+        * mostLikely(dists[iNTG].type, dists[iNTG].v, dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type, dists[iPHI].v, dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type, dists[iSW].v, dists[iSW].wPerc))
+        * mostLikely(dists[iRs].type, dists[iRs].v, dists[iRs].wPerc)
+        / mostLikely(dists[iBo].type, dists[iBo].v, dists[iBo].wPerc)) / 5.8e9;
       detMidCase = detStoiip + detGiipBOE;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         }
@@ -1283,16 +1356,31 @@ function runSimulation() {
         return;
   } else if (fluid === 'gasvo') {
     metric = resultType || 'total';
-    A = new Float64Array(n); H = new Float64Array(n); NTG = new Float64Array(n); PHI = new Float64Array(n); SW = new Float64Array(n);
+    // Name-based indices for robustness
+    const idxOf = (nm) => dists.findIndex(p => p.name === nm);
+    const iGRV = idxOf('GRV');
+    const iArea = idxOf('Area');
+    const iThick = idxOf('Thickness');
+    const iNTG = idxOf('Net to Gross');
+    const iPHI = idxOf('Porosity');
+    const iSW = idxOf('Water Saturation');
+    const iBg = idxOf('Bg');
+    const iRv = idxOf('Rv');
+    if (useGRV) { GRV = new Float64Array(n); } else { A = new Float64Array(n); H = new Float64Array(n); }
+    NTG = new Float64Array(n); PHI = new Float64Array(n); SW = new Float64Array(n);
     Bg = new Float64Array(n); Rv = new Float64Array(n); RF = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
-      H[i] = drawOne(dists[1].type, dists[1].raw, dists[1].v, 'Thickness', dists[1].wPerc);
-      NTG[i] = drawOne(dists[2].type, dists[2].raw, dists[2].v, 'Net to Gross', dists[2].wPerc);
-      PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
-      SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
-      Bg[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, 'Bg', dists[5].wPerc);
-      Rv[i] = drawOne(dists[6].type, dists[6].raw, dists[6].v, 'Rv', dists[6].wPerc);
+      if (useGRV) {
+        GRV[i] = drawOne(dists[iGRV].type, dists[iGRV].raw, dists[iGRV].v, 'GRV', dists[iGRV].wPerc);
+      } else {
+        A[i] = drawOne(dists[iArea].type, dists[iArea].raw, dists[iArea].v, 'Area', dists[iArea].wPerc);
+        H[i] = drawOne(dists[iThick].type, dists[iThick].raw, dists[iThick].v, 'Thickness', dists[iThick].wPerc);
+      }
+      NTG[i] = drawOne(dists[iNTG].type, dists[iNTG].raw, dists[iNTG].v, 'Net to Gross', dists[iNTG].wPerc);
+      PHI[i] = drawOne(dists[iPHI].type, dists[iPHI].raw, dists[iPHI].v, 'Porosity', dists[iPHI].wPerc);
+      SW[i] = drawOne(dists[iSW].type, dists[iSW].raw, dists[iSW].v, 'Water Saturation', dists[iSW].wPerc);
+      Bg[i] = drawOne(dists[iBg].type, dists[iBg].raw, dists[iBg].v, 'Bg', dists[iBg].wPerc);
+      Rv[i] = drawOne(dists[iRv].type, dists[iRv].raw, dists[iRv].v, 'Rv', dists[iRv].wPerc);
       // RF
       if (rfType === 'Discrete') {
         const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
@@ -1314,58 +1402,58 @@ function runSimulation() {
     let totalMMBOE_vo = new Float64Array(n);// Total in MMBOE
     for (let i = 0; i < n; i++) {
       // Gas in BCF
-      giipBCF_g[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 1e9;
+      const AH = useGRV ? GRV[i] : (A[i] * H[i]);
+      giipBCF_g[i] = (43560 * AH * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 1e9;
       // Gas in MMBOE
-      giipMMBOE[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 5.8e9;
+      giipMMBOE[i] = (43560 * AH * NTG[i] * PHI[i] * (1 - SW[i]) / Bg[i]) / 5.8e9;
       // Vaporized oil from gas (STB -> MMBO)
-      voMMBO[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) * Rv[i] / Bg[i]) / 1e6;
+      voMMBO[i] = (43560 * AH * NTG[i] * PHI[i] * (1 - SW[i]) * Rv[i] / Bg[i]) / 1e6;
       totalMMBOE_vo[i] = giipMMBOE[i] + voMMBO[i];
     }
   // Choose metric
   let primary, rec, labelSet, detMidCase, detRecMidCase;
+  const detGeom_gv = useGRV
+    ? mostLikely(dists[iGRV].type, dists[iGRV].v, dists[iGRV].wPerc)
+    : (mostLikely(dists[iArea].type, dists[iArea].v, dists[iArea].wPerc) * mostLikely(dists[iThick].type, dists[iThick].v, dists[iThick].wPerc));
   if (metric === 'giip') {
       primary = giipBCF_g; rec = giipBCF_g.map((v,i)=>v*RF[i]);
       labelSet = { primary: 'GIIP', unit: 'BCF', xMain: 'GIIP (BCF)', xRec: 'Recoverable (BCF)',
         cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
         formula: 'Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'};
-      detMidCase = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
-        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
-        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
-        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
-        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 1e9;
+      detMidCase = (43560 * detGeom_gv
+        * mostLikely(dists[iNTG].type,dists[iNTG].v,dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type,dists[iPHI].v,dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type,dists[iSW].v,dists[iSW].wPerc))
+        / mostLikely(dists[iBg].type,dists[iBg].v,dists[iBg].wPerc)) / 1e9;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
     } else if (metric === 'vo') {
       primary = voMMBO; rec = voMMBO.map((v,i)=>v*RF[i]);
       labelSet = { primary: 'Vaporized Oil', unit: 'MMBO', xMain: 'Vaporized Oil (MMBO)', xRec: 'Recoverable (MMBO)',
         cdfTitle: 'Vaporized Oil CDF', histTitle: 'Vaporized Oil Histogram', metricRec: 'Recoverable Vaporized Oil',
         formula: 'Formula (Vaporized Oil): <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in MMBO).'};
-      detMidCase = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
-        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
-        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
-        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
-        * mostLikely(dists[6].type,dists[6].v,dists[6].wPerc)
-        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 1e6;
+      detMidCase = (43560 * detGeom_gv
+        * mostLikely(dists[iNTG].type,dists[iNTG].v,dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type,dists[iPHI].v,dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type,dists[iSW].v,dists[iSW].wPerc))
+        * mostLikely(dists[iRv].type,dists[iRv].v,dists[iRv].wPerc)
+        / mostLikely(dists[iBg].type,dists[iBg].v,dists[iBg].wPerc)) / 1e6;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
     } else { // total MMBOE
       primary = totalMMBOE_vo; rec = totalMMBOE_vo.map((v,i)=>v*RF[i]);
       labelSet = { primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
         cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
         formula: 'Formula (Total): <code>Total MMBOE = GIIP(MMBOE) + Vaporized Oil (MMBO)</code>.' };
-      const detGiipMMBOE = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
-        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
-        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
-        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
-        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 5.8e9;
-      const detVoMMBO = (43560 * mostLikely(dists[0].type,dists[0].v,dists[0].wPerc)
-        * mostLikely(dists[1].type,dists[1].v,dists[1].wPerc)
-        * mostLikely(dists[2].type,dists[2].v,dists[2].wPerc)
-        * mostLikely(dists[3].type,dists[3].v,dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type,dists[4].v,dists[4].wPerc))
-        * mostLikely(dists[6].type,dists[6].v,dists[6].wPerc)
-        / mostLikely(dists[5].type,dists[5].v,dists[5].wPerc)) / 1e6;
+      const detGiipMMBOE = (43560 * detGeom_gv
+        * mostLikely(dists[iNTG].type,dists[iNTG].v,dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type,dists[iPHI].v,dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type,dists[iSW].v,dists[iSW].wPerc))
+        / mostLikely(dists[iBg].type,dists[iBg].v,dists[iBg].wPerc)) / 5.8e9;
+      const detVoMMBO = (43560 * detGeom_gv
+        * mostLikely(dists[iNTG].type,dists[iNTG].v,dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type,dists[iPHI].v,dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type,dists[iSW].v,dists[iSW].wPerc))
+        * mostLikely(dists[iRv].type,dists[iRv].v,dists[iRv].wPerc)
+        / mostLikely(dists[iBg].type,dists[iBg].v,dists[iBg].wPerc)) / 1e6;
       detMidCase = detGiipMMBOE + detVoMMBO;
       detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
     }
@@ -1432,20 +1520,33 @@ function runSimulation() {
   wireSyncedZoom();
     return;
   } else if (fluid === 'oil' || fluid === 'gas') {
-        A = new Float64Array(n);
-        H = new Float64Array(n);
+        const useGRV = geometryMode() === 'grv';
+        // Name-based indices for robustness across geometry modes
+        const idxOf = (nm) => dists.findIndex(p => p.name === nm);
+        const iGRV = idxOf('GRV');
+        const iArea = idxOf('Area');
+        const iThick = idxOf('Thickness');
+        const iNTG = idxOf('Net to Gross');
+        const iPHI = idxOf('Porosity');
+        const iSW = idxOf('Water Saturation');
+        const iFVF = idxOf(fluid === 'oil' ? 'Bo' : 'Bg');
+        if (useGRV) { GRV = new Float64Array(n); } else { A = new Float64Array(n); H = new Float64Array(n); }
         NTG = new Float64Array(n);
         PHI = new Float64Array(n);
         SW = new Float64Array(n);
         RF = new Float64Array(n);
         let FVF = new Float64Array(n); // Bo for oil, Bg for gas
         for (let i = 0; i < n; i++) {
-            A[i] = drawOne(dists[0].type, dists[0].raw, dists[0].v, 'Area', dists[0].wPerc);
-            H[i] = drawOne(dists[1].type, dists[1].raw, dists[1].v, 'Thickness', dists[1].wPerc);
-            NTG[i] = drawOne(dists[2].type, dists[2].raw, dists[2].v, 'Net to Gross', dists[2].wPerc);
-            PHI[i] = drawOne(dists[3].type, dists[3].raw, dists[3].v, 'Porosity', dists[3].wPerc);
-            SW[i] = drawOne(dists[4].type, dists[4].raw, dists[4].v, 'Water Saturation', dists[4].wPerc);
-            FVF[i] = drawOne(dists[5].type, dists[5].raw, dists[5].v, fluid === 'oil' ? 'Bo' : 'Bg', dists[5].wPerc);
+            if (useGRV) {
+              GRV[i] = drawOne(dists[iGRV].type, dists[iGRV].raw, dists[iGRV].v, 'GRV', dists[iGRV].wPerc);
+            } else {
+              A[i] = drawOne(dists[iArea].type, dists[iArea].raw, dists[iArea].v, 'Area', dists[iArea].wPerc);
+              H[i] = drawOne(dists[iThick].type, dists[iThick].raw, dists[iThick].v, 'Thickness', dists[iThick].wPerc);
+            }
+            NTG[i] = drawOne(dists[iNTG].type, dists[iNTG].raw, dists[iNTG].v, 'Net to Gross', dists[iNTG].wPerc);
+            PHI[i] = drawOne(dists[iPHI].type, dists[iPHI].raw, dists[iPHI].v, 'Porosity', dists[iPHI].wPerc);
+            SW[i] = drawOne(dists[iSW].type, dists[iSW].raw, dists[iSW].v, 'Water Saturation', dists[iSW].wPerc);
+            FVF[i] = drawOne(dists[iFVF].type, dists[iFVF].raw, dists[iFVF].v, fluid === 'oil' ? 'Bo' : 'Bg', dists[iFVF].wPerc);
             // Recovery Factor sampling
             if (rfType === 'Discrete') {
                 const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
@@ -1479,30 +1580,36 @@ function runSimulation() {
             primary = new Float64Array(n);
             rec = new Float64Array(n);
             for (let i = 0; i < n; i++) {
-                primary[i] = (7758 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / FVF[i]) / 1e6;
+                const AH = useGRV ? GRV[i] : (A[i] * H[i]);
+                primary[i] = (7758 * AH * NTG[i] * PHI[i] * (1 - SW[i]) / FVF[i]) / 1e6;
                 rec[i] = primary[i] * RF[i];
             }
             labelSet = labelsFor('oil');
-      detMidCase = (7758 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
-        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
-        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
-        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
-        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e6;
+      const detAH = useGRV
+        ? mostLikely(dists[iGRV].type, dists[iGRV].v, dists[iGRV].wPerc)
+        : (mostLikely(dists[iArea].type, dists[iArea].v, dists[iArea].wPerc) * mostLikely(dists[iThick].type, dists[iThick].v, dists[iThick].wPerc));
+      detMidCase = (7758 * detAH
+        * mostLikely(dists[iNTG].type, dists[iNTG].v, dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type, dists[iPHI].v, dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type, dists[iSW].v, dists[iSW].wPerc))
+        / mostLikely(dists[iFVF].type, dists[iFVF].v, dists[iFVF].wPerc)) / 1e6;
         } else {
             primary = new Float64Array(n);
             rec = new Float64Array(n);
       for (let i = 0; i < n; i++) {
-        primary[i] = (43560 * A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]) / FVF[i]) / 1e9;
+        const AH = useGRV ? GRV[i] : (A[i] * H[i]);
+        primary[i] = (43560 * AH * NTG[i] * PHI[i] * (1 - SW[i]) / FVF[i]) / 1e9;
         rec[i] = primary[i] * RF[i];
       }
             labelSet = labelsFor('gas');
-      detMidCase = (43560 * mostLikely(dists[0].type, dists[0].v, dists[0].wPerc)
-        * mostLikely(dists[1].type, dists[1].v, dists[1].wPerc)
-        * mostLikely(dists[2].type, dists[2].v, dists[2].wPerc)
-        * mostLikely(dists[3].type, dists[3].v, dists[3].wPerc)
-        * (1 - mostLikely(dists[4].type, dists[4].v, dists[4].wPerc))
-        / mostLikely(dists[5].type, dists[5].v, dists[5].wPerc)) / 1e9;
+      const detAHg2 = useGRV
+        ? mostLikely(dists[iGRV].type, dists[iGRV].v, dists[iGRV].wPerc)
+        : (mostLikely(dists[iArea].type, dists[iArea].v, dists[iArea].wPerc) * mostLikely(dists[iThick].type, dists[iThick].v, dists[iThick].wPerc));
+      detMidCase = (43560 * detAHg2
+        * mostLikely(dists[iNTG].type, dists[iNTG].v, dists[iNTG].wPerc)
+        * mostLikely(dists[iPHI].type, dists[iPHI].v, dists[iPHI].wPerc)
+        * (1 - mostLikely(dists[iSW].type, dists[iSW].v, dists[iSW].wPerc))
+        / mostLikely(dists[iFVF].type, dists[iFVF].v, dists[iFVF].wPerc)) / 1e9;
         }
         detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         // Table, plots, tornado chart (unchanged)
@@ -1633,63 +1740,60 @@ function runSimulation() {
 
 // Tornado sensitivity calculation function
 function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
+    // Access helpers
     function getBase(idx) {
-    // Use converted values (v) so unit selectors are respected
-    return mostLikely(params[idx].type, params[idx].v, params[idx].wPerc);
+      return mostLikely(params[idx].type, params[idx].v, params[idx].wPerc);
     }
-  function getLowHigh(idx) {
-    // Also derive low/high in the same unit space; lowHighFrom uses raw, then we convert per param
-    const {low, high} = lowHighFrom(params[idx].type, params[idx].raw);
-    const name = params[idx].name;
-    const conv = convTriplet(name, [low, NaN, high]);
-    return {low: conv[0], high: conv[2]};
-  }
+    function getLowHigh(idx) {
+      const {low, high} = lowHighFrom(params[idx].type, params[idx].raw);
+      const name = params[idx].name;
+      const conv = convTriplet(name, [low, NaN, high]);
+      return {low: conv[0], high: conv[2]};
+    }
+    const idxByName = (name) => params.findIndex(p=>p.name===name);
+    const hasGRV = idxByName('GRV') !== -1;
     const baseRF = mostLikely(rfType, rfRaw, rfPerc);
-    function getBaseRs() {
-    if (fluid === 'oilgas') return mostLikely(params[6].type, params[6].v, params[6].wPerc);
-        return NaN;
-    }
-    function getBaseBo() {
-    if (fluid === 'oilgas') return mostLikely(params[5].type, params[5].v, params[5].wPerc);
-    if (fluid === 'oil') return mostLikely(params[5].type, params[5].v, params[5].wPerc);
-        return NaN;
-    }
-    function getBaseRv(){
-      if (fluid === 'gasvo') return mostLikely(params[6].type, params[6].v, params[6].wPerc);
-      return NaN;
-    }
-    function getBaseBg(){
-      if (fluid === 'gas' || fluid==='gasvo') return mostLikely(params[5].type, params[5].v, params[5].wPerc);
-      return NaN;
-    }
+    const baseVal = (name) => {
+      const j = idxByName(name); return j>=0 ? getBase(j) : NaN;
+    };
+    const geomBase = () => hasGRV ? baseVal('GRV') : (baseVal('Area') * baseVal('Thickness'));
+    const factor = (name, idx, low, high, which) => {
+      const j = idxByName(name);
+      if (j<0) return NaN;
+      if (idx===j) return which==='low'?low:which==='high'?high:getBase(j);
+      return getBase(j);
+    };
+    const geom = (idx, low, high, which) => {
+      if (hasGRV) return factor('GRV', idx, low, high, which);
+      const a = factor('Area', idx, low, high, which);
+      const h = factor('Thickness', idx, low, high, which);
+      return a*h;
+    };
     let base;
     if (fluid === 'oil') {
-        base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
-  } else if (fluid === 'gas') {
-    // Gas in BCF
-    base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e9;
-  } else if (fluid === 'oilgas') {
-        if (metric === 'stoiip') {
-            base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
-        } else if (metric === 'giip') {
-      // Solution gas in BCF
-      base = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 1e9;
-        } else {
-            const detStoiip = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBase(5)) / 1e6;
-  // Convert solution gas to MMBOE for total (5.8 Mscf/BOE -> divide scf by 5.8e9)
-  const detGiipBOE = (7758 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRs() / getBaseBo()) / 5.8e9;
-      base = detStoiip + detGiipBOE;
-        }
+      base = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bo')) / 1e6;
+    } else if (fluid === 'gas') {
+      base = (43560 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bg')) / 1e9;
+    } else if (fluid === 'oilgas') {
+      if (metric === 'stoiip') {
+        base = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bo')) / 1e6;
+      } else if (metric === 'giip') {
+        base = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) * baseVal('Rs') / baseVal('Bo')) / 1e9;
+      } else {
+        const detStoiip = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bo')) / 1e6;
+        const detGiipBOE = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) * baseVal('Rs') / baseVal('Bo')) / 5.8e9;
+        base = detStoiip + detGiipBOE;
+      }
     } else if (fluid === 'gasvo') {
-        if (metric === 'giip') {
-          base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBaseBg()) / 1e9;
-        } else if (metric === 'vo') {
-          base = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRv() / getBaseBg()) / 1e6;
-        } else { // total MMBOE = GIIP(MMBOE)+VO(MMBO)
-          const detGiipMMBOE = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) / getBaseBg()) / 5.8e9;
-          const detVoMMBO = (43560 * getBase(0) * getBase(1) * getBase(2) * getBase(3) * (1 - getBase(4)) * getBaseRv() / getBaseBg()) / 1e6;
-          base = detGiipMMBOE + detVoMMBO;
-        }
+      if (metric === 'giip') {
+        base = (43560 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bg')) / 1e9;
+      } else if (metric === 'vo') {
+        base = (43560 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) * baseVal('Rv') / baseVal('Bg')) / 1e6;
+      } else {
+        const detGiipMMBOE = (43560 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bg')) / 5.8e9;
+        const detVoMMBO = (43560 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) * baseVal('Rv') / baseVal('Bg')) / 1e6;
+        base = detGiipMMBOE + detVoMMBO;
+      }
     }
     // Decide which parameters to include in the tornado based on selected metric
     const includeIdx = [];
@@ -1707,45 +1811,42 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
         const {low, high} = getLowHigh(idx);
         let lowVal, highVal;
         if (fluid === 'oil') {
-            lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
-            highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
-    } else if (fluid === 'gas') {
-      // Gas in BCF
-      lowVal = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e9;
-      highVal = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e9;
-  } else if (fluid === 'oilgas') {
-            if (metric === 'stoiip') {
-                lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
-                highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
-            } else if (metric === 'giip') {
-        // Solution gas in BCF
-        lowVal = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 1e9;
-        highVal = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 1e9;
-      } else {
-                const detStoiipLow = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBase(5))) / 1e6;
-  // Solution gas to MMBOE for total (divide scf by 5.8e9)
-  const detGiipLowBOE = (7758 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRs()) / (idx === 5 ? low : getBaseBo())) / 5.8e9;
-        lowVal = detStoiipLow + detGiipLowBOE;
-                const detStoiipHigh = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBase(5))) / 1e6;
-  const detGiipHighBOE = (7758 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRs()) / (idx === 5 ? high : getBaseBo())) / 5.8e9;
-        highVal = detStoiipHigh + detGiipHighBOE;
-      }
-    } else if (fluid === 'gasvo') {
-      if (metric === 'giip') {
-        lowVal = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBaseBg())) / 1e9;
-        highVal = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBaseBg())) / 1e9;
-      } else if (metric === 'vo') {
-        const voLow = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRv()) / (idx === 5 ? low : getBaseBg())) / 1e6;
-        const voHigh = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRv()) / (idx === 5 ? high : getBaseBg())) / 1e6;
-        lowVal = voLow; highVal = voHigh;
-      } else { // total MMBOE
-        const giipLowMMBOE = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) / (idx === 5 ? low : getBaseBg())) / 5.8e9;
-        const giipHighMMBOE = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) / (idx === 5 ? high : getBaseBg())) / 5.8e9;
-        const voLow = (43560 * (idx === 0 ? low : getBase(0)) * (idx === 1 ? low : getBase(1)) * (idx === 2 ? low : getBase(2)) * (idx === 3 ? low : getBase(3)) * (1 - (idx === 4 ? low : getBase(4))) * (idx === 6 ? low : getBaseRv()) / (idx === 5 ? low : getBaseBg())) / 1e6;
-        const voHigh = (43560 * (idx === 0 ? high : getBase(0)) * (idx === 1 ? high : getBase(1)) * (idx === 2 ? high : getBase(2)) * (idx === 3 ? high : getBase(3)) * (1 - (idx === 4 ? high : getBase(4))) * (idx === 6 ? high : getBaseRv()) / (idx === 5 ? high : getBaseBg())) / 1e6;
-        lowVal = giipLowMMBOE + voLow;
-        highVal = giipHighMMBOE + voHigh;
-      }
+          lowVal = (7758 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bo', idx, low, high, 'low')) / 1e6;
+          highVal = (7758 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bo', idx, low, high, 'high')) / 1e6;
+        } else if (fluid === 'gas') {
+          lowVal = (43560 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bg', idx, low, high, 'low')) / 1e9;
+          highVal = (43560 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bg', idx, low, high, 'high')) / 1e9;
+        } else if (fluid === 'oilgas') {
+          if (metric === 'stoiip') {
+            lowVal = (7758 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bo', idx, low, high, 'low')) / 1e6;
+            highVal = (7758 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bo', idx, low, high, 'high')) / 1e6;
+          } else if (metric === 'giip') {
+            lowVal = (7758 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) * factor('Rs', idx, low, high, 'low') / factor('Bo', idx, low, high, 'low')) / 1e9;
+            highVal = (7758 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) * factor('Rs', idx, low, high, 'high') / factor('Bo', idx, low, high, 'high')) / 1e9;
+          } else {
+            const detStoiipLow = (7758 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bo', idx, low, high, 'low')) / 1e6;
+            const detGiipLowBOE = (7758 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) * factor('Rs', idx, low, high, 'low') / factor('Bo', idx, low, high, 'low')) / 5.8e9;
+            lowVal = detStoiipLow + detGiipLowBOE;
+            const detStoiipHigh = (7758 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bo', idx, low, high, 'high')) / 1e6;
+            const detGiipHighBOE = (7758 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) * factor('Rs', idx, low, high, 'high') / factor('Bo', idx, low, high, 'high')) / 5.8e9;
+            highVal = detStoiipHigh + detGiipHighBOE;
+          }
+        } else if (fluid === 'gasvo') {
+          if (metric === 'giip') {
+            lowVal = (43560 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bg', idx, low, high, 'low')) / 1e9;
+            highVal = (43560 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bg', idx, low, high, 'high')) / 1e9;
+          } else if (metric === 'vo') {
+            const voLow = (43560 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) * factor('Rv', idx, low, high, 'low') / factor('Bg', idx, low, high, 'low')) / 1e6;
+            const voHigh = (43560 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) * factor('Rv', idx, low, high, 'high') / factor('Bg', idx, low, high, 'high')) / 1e6;
+            lowVal = voLow; highVal = voHigh;
+          } else {
+            const giipLowMMBOE = (43560 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bg', idx, low, high, 'low')) / 5.8e9;
+            const giipHighMMBOE = (43560 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bg', idx, low, high, 'high')) / 5.8e9;
+            const voLow = (43560 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) * factor('Rv', idx, low, high, 'low') / factor('Bg', idx, low, high, 'low')) / 1e6;
+            const voHigh = (43560 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) * factor('Rv', idx, low, high, 'high') / factor('Bg', idx, low, high, 'high')) / 1e6;
+            lowVal = giipLowMMBOE + voLow;
+            highVal = giipHighMMBOE + voHigh;
+          }
         }
         bars.push({
             name: paramNames[idx],
@@ -1875,6 +1976,7 @@ helpModal.addEventListener('click', (e)=>{ if(e.target===helpModal){ helpClose.c
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && helpModal.classList.contains('open')) helpClose.click(); });
 
 /* Bootstrap */
+mountGeometrySelector();
 mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
 </script>
 </body>
