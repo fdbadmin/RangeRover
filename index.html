@@ -231,7 +231,7 @@
 
       <div class="form-grid">
         <label for="fluid">Fluid</label>
-  <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option><option value="oilgas">Oil + Solution Gas</option><option value="gasvo">Gas + Vaporized Oil</option></select>
+  <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option><option value="csg">Coal Seam Gas</option><option value="oilgas">Oil + Solution Gas</option><option value="gasvo">Gas + Vaporized Oil</option></select>
 
         <label for="iterations">Iterations</label>
         <input id="iterations" type="number" min="100" step="100" value="10000" />
@@ -365,7 +365,7 @@
 
       <h3 id="quickstart">2) Quick start</h3>
       <ol>
-  <li>Select <b>Fluid</b>: Oil, Gas, <b>Oil + Solution Gas</b>, or <b>Gas + Vaporized Oil</b> (units & formula update automatically).</li>
+  <li>Select <b>Fluid</b>: Oil, Gas, <b>Coal Seam Gas</b>, <b>Oil + Solution Gas</b>, or <b>Gas + Vaporized Oil</b> (units & formula update automatically).</li>
         <li>Choose units for <b>Area</b> and <b>Thickness</b>.</li>
         <li>For each parameter (Area, Thickness, NTG, Porosity, Water Saturation, Bo/Bg), choose a <b>Distribution</b> (Normal, Triangular, PERT, Uniform, Known, Discrete) and provide its parameters. Small labels above each box guide what to enter (e.g., Mean/Std Dev or Min/Mode/Max).</li>
         <li>Set the <b>Recovery Factor</b> distribution if needed.</li>
@@ -378,6 +378,7 @@
         <li><b>Thickness</b>: m or ft (internally converted to ft).</li>
         <li><b>NTG</b>, <b>Porosity</b>, <b>Water Saturation</b> are treated as <b>fractions</b> (0–1). Previews display in % for readability.</li>
   <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas; <b>Rs</b> (scf/bbl) with <b>Oil + Solution Gas</b>; <b>Rv</b> (bbl/scf) with <b>Gas + Vaporized Oil</b>.</li>
+  <li><b>Coal Seam Gas</b> uses <b>Coal Density</b> (g/cm³, typically 1.3–1.5) and <b>Gas Content</b> (scf/ton) instead of porosity/saturation parameters.</li>
       </ul>
 
       <h3 id="dists">4) Distributions</h3>
@@ -489,6 +490,8 @@ function paramsFor(fluid){
   const geomParams = (geom==='grv') ? [{name:"GRV"}] : [{name:"Area"},{name:"Thickness"}];
   if(fluid==='gas')
     return [...geomParams,{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bg",pos:true}];
+  if(fluid==='csg')
+    return [...geomParams,{name:"Coal Density",pos:true},{name:"Gas Content",pos:true}];
   if(fluid==='oilgas')
     return [...geomParams,{name:"Net to Gross",isFrac:true},{name:"Porosity",isFrac:true},{name:"Water Saturation",isFrac:true},{name:"Bo",pos:true},{name:"Rs",pos:true}];
   if(fluid==='gasvo')
@@ -500,6 +503,12 @@ function labelsFor(fluid){
     return { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
       cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
       formula:'Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
+    };
+  }
+  if(fluid==='csg'){
+    return { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
+      cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
+      formula:'Formula (Coal Seam Gas): <code>GIIP = 1,359.77 × A × h × ρ<sub>coal</sub> × G<sub>c</sub></code> where ρ<sub>coal</sub> = coal density (g/cm³), G<sub>c</sub> = gas content (scf/ton). Result in SCF; plots in BCF.'
     };
   }
   if(fluid==='gasvo'){
@@ -563,6 +572,8 @@ function boundsFor(name,fluid){
   if(name==='Bo') return {min:1.0, max:Infinity};
   if(name==='Bg') return {min:1e-9, max:Infinity};
   if(name==='Rv') return {min:0, max:Infinity};
+  if(name==='Coal Density') return {min:0.1, max:Infinity}; // g/cm³, typically 1.3-1.5
+  if(name==='Gas Content') return {min:0, max:Infinity}; // scf/ton
   return {min:-Infinity, max:Infinity};
 }
 function sampleNormalTrunc(r, mean, std, min, max){
@@ -1126,7 +1137,11 @@ function generateSamplesCSV() {
     headers.push('Area (acres)', 'Thickness (ft)');
   }
   
-  headers.push('Net to Gross (frac)', 'Porosity (frac)', 'Water Saturation (frac)');
+  if (fluid === 'csg') {
+    headers.push('Coal Density (g/cm³)', 'Gas Content (scf/ton)');
+  } else {
+    headers.push('Net to Gross (frac)', 'Porosity (frac)', 'Water Saturation (frac)');
+  }
   
   if (fluid === 'oil' || fluid === 'oilgas') {
     headers.push('Bo (RB/STB)');
@@ -1139,10 +1154,19 @@ function generateSamplesCSV() {
   headers.push('Recovery Factor (frac)');
   
   // Add calculated fields
-  if (geomMode === 'grv') {
-    headers.push('HCPV (acre-ft)');
+  if (fluid === 'csg') {
+    // For CSG: Coal Mass instead of HCPV
+    if (geomMode === 'grv') {
+      headers.push('Coal Mass (tons)');
+    } else {
+      headers.push('GRV (acre-ft)', 'Coal Mass (tons)');
+    }
   } else {
-    headers.push('GRV (acre-ft)', 'HCPV (acre-ft)');
+    if (geomMode === 'grv') {
+      headers.push('HCPV (acre-ft)');
+    } else {
+      headers.push('GRV (acre-ft)', 'HCPV (acre-ft)');
+    }
   }
   
   headers.push(`In-Place (${labelSet.unit})`, `Recoverable (${labelSet.unit})`);
@@ -1159,11 +1183,18 @@ function generateSamplesCSV() {
       values.push(row.Area.toFixed(2), row.Thickness.toFixed(2));
     }
     
-    values.push(
-      row.NTG.toFixed(4),
-      row.PHI.toFixed(4),
-      row.SW.toFixed(4)
-    );
+    if (fluid === 'csg') {
+      values.push(
+        row.CoalDensity.toFixed(2),
+        row.GasContent.toFixed(2)
+      );
+    } else {
+      values.push(
+        row.NTG.toFixed(4),
+        row.PHI.toFixed(4),
+        row.SW.toFixed(4)
+      );
+    }
     
     if (fluid === 'oil' || fluid === 'oilgas') {
       values.push(row.FVF.toFixed(4));
@@ -1176,10 +1207,19 @@ function generateSamplesCSV() {
     values.push(row.RF.toFixed(4));
     
     // Calculated fields
-    if (geomMode === 'grv') {
-      values.push(row.HCPV.toFixed(2));
+    if (fluid === 'csg') {
+      // For CSG: show Coal Mass instead of HCPV
+      if (geomMode === 'grv') {
+        values.push(row.CoalMass.toFixed(2));
+      } else {
+        values.push(row.GRV.toFixed(2), row.CoalMass.toFixed(2));
+      }
     } else {
-      values.push(row.GRV.toFixed(2), row.HCPV.toFixed(2));
+      if (geomMode === 'grv') {
+        values.push(row.HCPV.toFixed(2));
+      } else {
+        values.push(row.GRV.toFixed(2), row.HCPV.toFixed(2));
+      }
     }
     
     values.push(row.primary.toFixed(2), row.recoverable.toFixed(2));
@@ -1736,6 +1776,175 @@ function runSimulation() {
   document.getElementById('downloadSamples').disabled = false;
   
     return;
+  } else if (fluid === 'csg') {
+    // Coal Seam Gas simulation
+    const useGRV = geometryMode() === 'grv';
+    const idxOf = (nm) => dists.findIndex(p => p.name === nm);
+    const iGRV = idxOf('GRV');
+    const iArea = idxOf('Area');
+    const iThick = idxOf('Thickness');
+    const iDensity = idxOf('Coal Density');
+    const iGc = idxOf('Gas Content');
+    
+    if (useGRV) { GRV = new Float64Array(n); } else { A = new Float64Array(n); H = new Float64Array(n); }
+    let CoalDensity = new Float64Array(n);
+    let GasContent = new Float64Array(n);
+    RF = new Float64Array(n);
+    
+    for (let i = 0; i < n; i++) {
+      if (useGRV) {
+        GRV[i] = drawOne(dists[iGRV].type, dists[iGRV].raw, dists[iGRV].v, 'GRV', dists[iGRV].wPerc);
+      } else {
+        A[i] = drawOne(dists[iArea].type, dists[iArea].raw, dists[iArea].v, 'Area', dists[iArea].wPerc);
+        H[i] = drawOne(dists[iThick].type, dists[iThick].raw, dists[iThick].v, 'Thickness', dists[iThick].wPerc);
+      }
+      CoalDensity[i] = drawOne(dists[iDensity].type, dists[iDensity].raw, dists[iDensity].v, 'Coal Density', dists[iDensity].wPerc);
+      GasContent[i] = drawOne(dists[iGc].type, dists[iGc].raw, dists[iGc].v, 'Gas Content', dists[iGc].wPerc);
+      
+      // Recovery Factor
+      if (rfType === 'Discrete') {
+        const {vals, weights} = discreteValsAndWeights(rfRaw, rfPerc);
+        const u = rnd();
+        if (vals.length === 0) { RF[i] = 0; } else {
+          let acc = 0, pick = vals[vals.length - 1];
+          for (let k = 0; k < vals.length; k++) { acc += weights[k]; if (u <= acc) { pick = vals[k]; break; } }
+          RF[i] = Math.max(0, Math.min(1, pick));
+        }
+      } else if (rfType === 'Triangular') { RF[i] = sampleTriangular(rnd, rfRaw[0], rfRaw[1], rfRaw[2]); }
+      else if (rfType === 'Uniform') { RF[i] = sampleUniform(rnd, rfRaw[0], rfRaw[2]); }
+      else if (rfType === 'Normal') { RF[i] = sampleNormalTrunc(rnd, rfRaw[0], rfRaw[1], 0, 1); }
+      else { const {mean, sigma} = normalFromP90P50P10(rfRaw[0], rfRaw[1], rfRaw[2]); RF[i] = sampleNormalTrunc(rnd, mean, sigma, 0, 1); }
+    }
+    
+    let primary = new Float64Array(n);
+    let rec = new Float64Array(n);
+    
+    for (let i = 0; i < n; i++) {
+      const AH = useGRV ? GRV[i] : (A[i] * H[i]);
+      // CSG formula: GIIP (scf) = 1359.7 × A (acres) × h (ft) × ρ_coal (lb/ft³) × Gc (scf/ton)
+      // Conversion factor: 1 acre-ft × 1 lb/ft³ = 1359.7 tons
+      primary[i] = (1359.7 * AH * CoalDensity[i] * GasContent[i]) / 1e9; // Convert to BCF
+      rec[i] = primary[i] * RF[i];
+    }
+    
+    const labelSet = labelsFor('csg');
+    
+    // Deterministic mid-case
+    const detAH_csg = useGRV
+      ? mostLikely(dists[iGRV].type, dists[iGRV].v, dists[iGRV].wPerc)
+      : (mostLikely(dists[iArea].type, dists[iArea].v, dists[iArea].wPerc) * mostLikely(dists[iThick].type, dists[iThick].v, dists[iThick].wPerc));
+    const detMidCase = (1359.7 * detAH_csg
+      * mostLikely(dists[iDensity].type, dists[iDensity].v, dists[iDensity].wPerc)
+      * mostLikely(dists[iGc].type, dists[iGc].v, dists[iGc].wPerc)) / 1e9;
+    const detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
+    
+    // Format and display results
+    const fmt_csg = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
+    const quantiles_csg = arr => {
+      const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+      return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
+    };
+    const [P90_csg, P50_csg, P10_csg] = quantiles_csg(primary), [RP90_csg, RP50_csg, RP10_csg] = quantiles_csg(rec);
+    
+    const resHdr_csg = document.getElementById('results-title');
+    if (resHdr_csg) resHdr_csg.innerHTML = `Results (${labelSet.unit}) <span class="chip">P90 / P50 / P10</span>`;
+    const metricNameEl_csg = document.getElementById('metric-name');
+    const metricNameRecEl_csg = document.getElementById('metric-name-rec');
+    if (metricNameEl_csg) metricNameEl_csg.textContent = labelSet.primary;
+    if (metricNameRecEl_csg) metricNameRecEl_csg.textContent = labelSet.metricRec;
+    const formulaEl_csg = document.getElementById('formula-note');
+    if (formulaEl_csg) formulaEl_csg.innerHTML = labelSet.formula;
+    
+    document.querySelector('.s-p90').textContent = fmt_csg(P90_csg);
+    document.querySelector('.s-p50').textContent = fmt_csg(P50_csg);
+    document.querySelector('.s-p10').textContent = fmt_csg(P10_csg);
+    
+    const percentile_csg = (arr, x) => {
+      const s = Array.from(arr).filter(Number.isFinite).sort((a,b)=>a-b);
+      if (s.length === 0 || !Number.isFinite(x)) return NaN;
+      let lo = 0, hi = s.length - 1;
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (s[mid] < x) lo = mid + 1; else hi = mid - 1; }
+      const idx = lo;
+      return idx < s.length ? (idx + 1) / s.length : 1;
+    };
+    const pDetMain_csg = percentile_csg(primary, detMidCase);
+    const pValMain_csg = Number.isFinite(pDetMain_csg) ? Math.max(0, Math.min(100, Math.round((1 - pDetMain_csg) * 100))) : NaN;
+    document.querySelector('.s-mid').textContent = Number.isFinite(pValMain_csg) ? `${fmt_csg(detMidCase)} (P${pValMain_csg})` : fmt_csg(detMidCase);
+    
+    document.querySelector('.r-p90').textContent = fmt_csg(RP90_csg);
+    document.querySelector('.r-p50').textContent = fmt_csg(RP50_csg);
+    document.querySelector('.r-p10').textContent = fmt_csg(RP10_csg);
+    const pDetRec_csg = percentile_csg(rec, detRecMidCase);
+    const pValRec_csg = Number.isFinite(pDetRec_csg) ? Math.max(0, Math.min(100, Math.round((1 - pDetRec_csg) * 100))) : NaN;
+    document.querySelector('.r-mid').textContent = Number.isFinite(pValRec_csg) ? `${fmt_csg(detRecMidCase)} (P${pValRec_csg})` : fmt_csg(detRecMidCase);
+    
+    // Plots
+    const config_csg = { displayModeBar: true, responsive: true, toImageButtonOptions: {format: 'png', filename: 'rangerover_csg', width: 1600, height: 1000, scale: 3} };
+    function baseLayout_csg(title, x, y) {
+      return { autosize: true, title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'}, paper_bgcolor: '#fff', plot_bgcolor: '#fff', margin: {t: 86, l: 90, r: 46, b: 70}, xaxis: { title: {text: x, standoff: 10}, gridcolor: '#EFEFEF', color: '#374151', ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', titlefont: {size: 15}, tickfont: {size: 13}, automargin: true }, yaxis: { title: y, gridcolor: '#EFEFEF', color: '#374151', ticks: 'outside', ticklen: 6, tickwidth: 1, tickcolor: '#e5e7eb', titlefont: {size: 15}, tickfont: {size: 13}, fixedrange: true }, hoverlabel: {font: {size: 12}}, showlegend: false };
+    }
+    function cdf_csg(arr){ const s = Array.from(arr).sort((a,b)=>a-b), y = s.map((_,i)=>(i+1)/s.length); return {x:s, y}; }
+    const cMain_csg = cdf_csg(primary), cRec_csg = cdf_csg(rec);
+    
+    Plotly.newPlot('cdf-main', [
+      {x: cMain_csg.x, y: cMain_csg.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      { x: [P90_csg, P50_csg, P10_csg], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_csg(P90_csg)}`, `P50=${fmt_csg(P50_csg)}`, `P10=${fmt_csg(P10_csg)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
+      { x: [detMidCase], y: [pDetMain_csg], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_csg(detMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+    ], baseLayout_csg(labelSet.cdfTitle, labelSet.xMain, 'Cumulative Probability (unitless)'), config_csg);
+    
+    const vLines_csg = xs => xs.map(x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'#ED1C24'}}));
+    const midLine_csg = x => ({type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', line:{dash:'dot', width:3, color:'var(--mid)'}});
+    function histogram_csg(arr, tgt, title, xlabel, marks, mid){ const trace={x:Array.from(arr), type:'histogram', nbinsx: nbins, marker:{color:'var(--blue-light)', line:{width:0.8, color:'var(--blue-stroke)'}}}; Plotly.newPlot(tgt, [trace], baseLayout_csg(title, xlabel, 'Frequency (count)'), config_csg).then(gd=>Plotly.relayout(gd,{shapes:[...vLines_csg(marks), midLine_csg(mid)]})); }
+    histogram_csg(primary, 'hist-main', labelSet.histTitle, labelSet.xMain, [P90_csg, P50_csg, P10_csg], detMidCase);
+    
+    Plotly.newPlot('cdf-rec', [
+      {x: cRec_csg.x, y: cRec_csg.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      { x: [RP90_csg, RP50_csg, RP10_csg], y: [0.1, 0.5, 0.9], mode: 'markers+text', marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, text: [`P90=${fmt_csg(RP90_csg)}`, `P50=${fmt_csg(RP50_csg)}`, `P10=${fmt_csg(RP10_csg)}`], textposition: ['right center','left center','right center'], textfont: {size: 12}, hoverinfo: 'skip' },
+      { x: [detRecMidCase], y: [pDetRec_csg], mode: 'markers+text', marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'}, text: [`Det. Mid Case=${fmt_csg(detRecMidCase)}`], textposition: 'top right', textfont: {size: 12}, hoverinfo: 'skip' }
+    ], baseLayout_csg(labelSet.cdfTitle + ' (Recoverable)', labelSet.xRec, 'Cumulative Probability (unitless)'), config_csg);
+    histogram_csg(rec, 'hist-rec', labelSet.histTitle + ' (Recoverable)', labelSet.xRec, [RP90_csg, RP50_csg, RP10_csg], detRecMidCase);
+    
+    const tornadoData_csg = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
+    plotTornado(tornadoData_csg, labelSet.unit);
+    wireSyncedZoom();
+    
+    // Store simulation data for CSV export
+    const samplesData_csg = [];
+    for (let i = 0; i < n; i++) {
+      const row = {
+        CoalDensity: CoalDensity[i],
+        GasContent: GasContent[i],
+        RF: RF[i],
+        primary: primary[i],
+        recoverable: rec[i]
+      };
+      
+      if (useGRV) {
+        row.GRV = GRV[i];
+        row.CoalMass = GRV[i] * CoalDensity[i] * 1359.7; // tons
+      } else {
+        row.Area = A[i];
+        row.Thickness = H[i];
+        row.GRV = A[i] * H[i];
+        row.CoalMass = A[i] * H[i] * CoalDensity[i] * 1359.7; // tons
+      }
+      
+      samplesData_csg.push(row);
+    }
+    
+    lastSimulationData = {
+      P90: P90_csg, P50: P50_csg, P10: P10_csg,
+      RP90: RP90_csg, RP50: RP50_csg, RP10: RP10_csg,
+      detMidCase, detRecMidCase,
+      pValMain: pValMain_csg, pValRec: pValRec_csg,
+      labelSet, fluid, samplesData: samplesData_csg
+    };
+    
+    // Enable CSV download buttons
+    document.getElementById('downloadCsv').disabled = false;
+    document.getElementById('downloadSamples').disabled = false;
+    
+    return;
   } else if (fluid === 'oil' || fluid === 'gas') {
         const useGRV = geometryMode() === 'grv';
         // Name-based indices for robustness across geometry modes
@@ -2034,6 +2243,8 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
       base = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bo')) / 1e6;
     } else if (fluid === 'gas') {
       base = (43560 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bg')) / 1e9;
+    } else if (fluid === 'csg') {
+      base = (1359.7 * geomBase() * baseVal('Coal Density') * baseVal('Gas Content')) / 1e9;
     } else if (fluid === 'oilgas') {
       if (metric === 'stoiip') {
         base = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bo')) / 1e6;
@@ -2076,6 +2287,9 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
         } else if (fluid === 'gas') {
           lowVal = (43560 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bg', idx, low, high, 'low')) / 1e9;
           highVal = (43560 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bg', idx, low, high, 'high')) / 1e9;
+        } else if (fluid === 'csg') {
+          lowVal = (1359.7 * geom(idx, low, high, 'low') * factor('Coal Density', idx, low, high, 'low') * factor('Gas Content', idx, low, high, 'low')) / 1e9;
+          highVal = (1359.7 * geom(idx, low, high, 'high') * factor('Coal Density', idx, low, high, 'high') * factor('Gas Content', idx, low, high, 'high')) / 1e9;
         } else if (fluid === 'oilgas') {
           if (metric === 'stoiip') {
             lowVal = (7758 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bo', idx, low, high, 'low')) / 1e6;
