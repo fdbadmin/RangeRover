@@ -1056,6 +1056,15 @@ function mostLikely(type,v,wPerc){
   return NaN;
 }
 
+/* ===== Number Formatting Helper ===== */
+function formatWithCommas(num, decimals) {
+  if (!Number.isFinite(num)) return 'NaN';
+  const fixed = num.toFixed(decimals);
+  const parts = fixed.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
+
 /* ===== Global storage for simulation results ===== */
 let lastSimulationData = null;
 
@@ -1431,7 +1440,7 @@ function runSimulation() {
         const formulaEl_og = document.getElementById('formula-note');
         if (formulaEl_og) formulaEl_og.innerHTML = labelSet.formula;
 
-        const fmt_og = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+        const fmt_og = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
         const quantiles_og = arr => {
           const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
           return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
@@ -1636,7 +1645,7 @@ function runSimulation() {
     const formulaEl_gv = document.getElementById('formula-note');
     if (formulaEl_gv) formulaEl_gv.innerHTML = labelSet.formula;
 
-    const fmt_gv = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+    const fmt_gv = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
     const quantiles_gv = arr => {
       const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
       return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
@@ -1821,7 +1830,7 @@ function runSimulation() {
         }
         detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
         // Table, plots, tornado chart (unchanged)
-        const fmt = x => (Math.abs(x) >= 100) ? x.toFixed(0) : x.toFixed(2);
+        const fmt = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
         const quantiles = arr => {
             const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
             return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
