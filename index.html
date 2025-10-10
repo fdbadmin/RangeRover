@@ -244,6 +244,67 @@
     from{opacity:0;}
     to{opacity:1;}
   }
+  
+  /* Results View Selector */
+  .results-controls{
+    display:flex;
+    gap:16px;
+    align-items:center;
+    padding:16px;
+    background:#F9FAFB;
+    border-radius:8px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+  }
+  .results-controls .control-group{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .results-controls label{
+    font-weight:600;
+    font-size:13px;
+    color:#374151;
+  }
+  .results-controls select{
+    padding:6px 32px 6px 10px;
+    border:1px solid #D1D5DB;
+    border-radius:6px;
+    background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path fill="%23374151" d="M6 8L2 4h8z"/></svg>') no-repeat right 8px center;
+    appearance:none;
+    font-size:13px;
+    cursor:pointer;
+    min-width:120px;
+  }
+  .results-controls .toggle-group{
+    display:flex;
+    background:#fff;
+    border:1px solid #D1D5DB;
+    border-radius:6px;
+    overflow:hidden;
+  }
+  .results-controls .toggle-btn{
+    padding:6px 14px;
+    background:#fff;
+    border:none;
+    border-right:1px solid #D1D5DB;
+    cursor:pointer;
+    font-size:13px;
+    color:#6B7280;
+    transition:all 0.2s;
+  }
+  .results-controls .toggle-btn:last-child{
+    border-right:none;
+  }
+  .results-controls .toggle-btn.active{
+    background:#3B82F6;
+    color:#fff;
+    font-weight:600;
+  }
+  .results-controls .toggle-btn:hover:not(.active){
+    background:#F3F4F6;
+  }
+  
   .reservoir-header{
     display:flex;
     align-items:center;
@@ -417,6 +478,35 @@
     <!-- Results -->
     <div class="card">
       <h3 class="section-title" id="results-title">Results (MMBO) <span class="chip">P90 / P50 / P10</span></h3>
+
+      <!-- Results View Selector -->
+      <div class="results-controls">
+        <div class="control-group">
+          <label for="volumeUnit">Volume Unit:</label>
+          <select id="volumeUnit">
+            <option value="native">Native (STOIIP/GIIP)</option>
+            <option value="mmboe" selected>MMBOE</option>
+          </select>
+        </div>
+        
+        <div class="control-group">
+          <label for="fluidFilter">Show Fluids:</label>
+          <select id="fluidFilter">
+            <option value="all" selected>All Fluids</option>
+            <option value="oil">Oil Only</option>
+            <option value="gas">Gas Only</option>
+            <option value="csg">CSG Only</option>
+          </select>
+        </div>
+        
+        <div class="control-group">
+          <label>Reservoirs:</label>
+          <div class="toggle-group">
+            <button class="toggle-btn active" data-view="aggregated">Aggregated</button>
+            <button class="toggle-btn" data-view="individual">By Reservoir</button>
+          </div>
+        </div>
+      </div>
 
       <div class="summary-wrap">
         <table id="summary">
@@ -1839,6 +1929,98 @@ function formatWithCommas(num, decimals) {
 /* ===== Global storage for simulation results ===== */
 let lastSimulationData = null;
 
+/* ===== Results View State ===== */
+let resultsViewState = {
+  volumeUnit: 'mmboe',      // 'native' or 'mmboe'
+  fluidFilter: 'all',       // 'all', 'oil', 'gas', 'csg'
+  reservoirView: 'aggregated' // 'aggregated' or 'individual'
+};
+
+/* ===== Refresh Results View Based on Filters ===== */
+function refreshResultsView() {
+  if (!lastSimulationData) return;
+  
+  console.log('Refreshing results view with state:', resultsViewState);
+  
+  // For single-reservoir mode, just refresh with unit conversion
+  if (!lastSimulationData.multiReservoir) {
+    // Single reservoir: apply unit conversion only
+    // TODO: Implement unit conversion for single reservoir
+    console.log('Single reservoir mode - unit conversion not yet implemented');
+    return;
+  }
+  
+  // Multi-reservoir mode: apply filters
+  const {reservoirResults, totalPrimary, totalRecoverable, iters} = lastSimulationData;
+  const nbins = Math.max(10, parseInt(document.getElementById('nbins').value, 10) || 100);
+  
+  // Filter reservoirs by fluid type
+  let filteredResults = reservoirResults;
+  if (resultsViewState.fluidFilter !== 'all') {
+    filteredResults = reservoirResults.filter(res => {
+      if (resultsViewState.fluidFilter === 'oil') {
+        return res.fluid === 'oil' || res.fluid === 'oilgas';
+      } else if (resultsViewState.fluidFilter === 'gas') {
+        return res.fluid === 'gas' || res.fluid === 'gasvo';
+      } else if (resultsViewState.fluidFilter === 'csg') {
+        return res.fluid === 'csg';
+      }
+      return true;
+    });
+  }
+  
+  // Recalculate totals for filtered reservoirs
+  const filteredTotalPrimary = new Array(iters).fill(0);
+  const filteredTotalRecoverable = new Array(iters).fill(0);
+  
+  for (let i = 0; i < iters; i++) {
+    filteredResults.forEach(res => {
+      filteredTotalPrimary[i] += res.primary[i];
+      filteredTotalRecoverable[i] += res.recoverable[i];
+    });
+  }
+  
+  // Apply unit conversion
+  const convertedResults = filteredResults.map(res => {
+    return {
+      ...res,
+      primary: applyUnitConversion(res.primary, res.fluid),
+      recoverable: applyUnitConversion(res.recoverable, res.fluid)
+    };
+  });
+  
+  const convertedTotalPrimary = applyUnitConversion(filteredTotalPrimary, 'mixed');
+  const convertedTotalRecoverable = applyUnitConversion(filteredTotalRecoverable, 'mixed');
+  
+  // Display based on reservoir view
+  if (resultsViewState.reservoirView === 'aggregated') {
+    displayMultiReservoirResultsFiltered(convertedResults, convertedTotalPrimary, convertedTotalRecoverable, nbins, false);
+  } else {
+    displayMultiReservoirResultsFiltered(convertedResults, convertedTotalPrimary, convertedTotalRecoverable, nbins, true);
+  }
+}
+
+/* ===== Unit Conversion Helper ===== */
+function applyUnitConversion(dataArray, fluidType) {
+  if (resultsViewState.volumeUnit === 'native') {
+    return dataArray; // No conversion
+  }
+  
+  // Convert to MMBOE
+  // For oil: already in MMBO, so already in BOE
+  // For gas: GIIP in BCF → MMBOE (divide by 6)
+  // For CSG: GIIP in BCF → MMBOE (divide by 6)
+  // For mixed: already in MMBOE
+  
+  if (fluidType === 'gas' || fluidType === 'gasvo' || fluidType === 'csg') {
+    // Gas volumes are in BCF, convert to MMBOE (1 BCF = ~167 MMBOE, or 1 MMBOE = 6 BCF)
+    return dataArray.map(v => v / 6);
+  }
+  
+  // Oil and mixed are already in MMBOE
+  return dataArray;
+}
+
 /* ===== CSV Export Functions ===== */
 function downloadCSV(filename, content) {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -2084,191 +2266,11 @@ function collectReservoirParams(containerSelector) {
 
 /* ===== Display Multi-Reservoir Results ===== */
 function displayMultiReservoirResults(reservoirResults, totalPrimary, totalRecoverable, nbins) {
-    console.log('Displaying multi-reservoir results');
+    console.log('Displaying multi-reservoir results (delegating to filtered version)');
     
-    // Helper functions
-    const fmt = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
-    const quantiles = arr => {
-        const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
-        return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
-    };
-    
-    // Calculate statistics for total
-    const [totalP90, totalP50, totalP10] = quantiles(totalPrimary);
-    const [totalRP90, totalRP50, totalRP10] = quantiles(totalRecoverable);
-    
-    // Update results title
-    document.getElementById('results-title').innerHTML = `Results (MMBOE) <span class="chip">P90 / P50 / P10</span>`;
-    
-    // Update summary table to show per-reservoir breakdown
-    const summaryTable = document.getElementById('summary');
-    const tbody = summaryTable.querySelector('tbody');
-    tbody.innerHTML = '';
-    
-    // Add total row
-    const totalRow = document.createElement('tr');
-    totalRow.style.fontWeight = 'bold';
-    totalRow.style.background = '#FFF8E5';
-    totalRow.innerHTML = `
-        <td>Total (All Reservoirs)</td>
-        <td>${fmt(totalP90)}</td>
-        <td>${fmt(totalP50)}</td>
-        <td>${fmt(totalP10)}</td>
-        <td>—</td>
-    `;
-    tbody.appendChild(totalRow);
-    
-    // Add recoverable total row
-    const totalRecRow = document.createElement('tr');
-    totalRecRow.style.fontWeight = 'bold';
-    totalRecRow.style.background = '#FFF8E5';
-    totalRecRow.innerHTML = `
-        <td>Recoverable Total</td>
-        <td>${fmt(totalRP90)}</td>
-        <td>${fmt(totalRP50)}</td>
-        <td>${fmt(totalRP10)}</td>
-        <td>—</td>
-    `;
-    tbody.appendChild(totalRecRow);
-    
-    // Add separator
-    const separatorRow = document.createElement('tr');
-    separatorRow.innerHTML = '<td colspan="5" style="height:10px;background:#f5f5f5;"></td>';
-    tbody.appendChild(separatorRow);
-    
-    // Add individual reservoir rows
-    reservoirResults.forEach(res => {
-        const [p90, p50, p10] = quantiles(res.primary);
-        const [rp90, rp50, rp10] = quantiles(res.recoverable);
-        
-        // Calculate contribution percentage
-        const contribution = (p50 / totalP50 * 100).toFixed(1);
-        
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${res.name} <span style="color:var(--muted);font-size:12px;">(${res.fluid.toUpperCase()})</span></td>
-            <td>${fmt(p90)}</td>
-            <td>${fmt(p50)} <span style="color:var(--muted);font-size:11px;">(${contribution}%)</span></td>
-            <td>${fmt(p10)}</td>
-            <td>—</td>
-        `;
-        tbody.appendChild(row);
-        
-        const recRow = document.createElement('tr');
-        recRow.innerHTML = `
-            <td style="padding-left:24px;">↳ Recoverable</td>
-            <td>${fmt(rp90)}</td>
-            <td>${fmt(rp50)}</td>
-            <td>${fmt(rp10)}</td>
-            <td>—</td>
-        `;
-        tbody.appendChild(recRow);
-    });
-    
-    // Plot aggregated CDF and histogram
-    const config = { displayModeBar: true, responsive: true, toImageButtonOptions: {format: 'png', filename: 'rangerover_multires', width: 1600, height: 1000, scale: 3} };
-    function baseLayout(title, x, y) {
-        return { 
-            autosize: true, 
-            title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'}, 
-            paper_bgcolor: '#fff', 
-            plot_bgcolor: '#fff', 
-            margin: {t: 86, l: 90, r: 46, b: 70}, 
-            xaxis: { 
-                title: {text: x, standoff: 10}, 
-                gridcolor: '#EFEFEF', 
-                color: '#374151', 
-                ticks: 'outside', 
-                ticklen: 6, 
-                tickwidth: 1, 
-                tickcolor: '#e5e7eb', 
-                titlefont: {size: 15}, 
-                tickfont: {size: 13}, 
-                automargin: true 
-            }, 
-            yaxis: { 
-                title: y, 
-                gridcolor: '#EFEFEF', 
-                color: '#374151', 
-                ticks: 'outside', 
-                ticklen: 6, 
-                tickwidth: 1, 
-                tickcolor: '#e5e7eb', 
-                titlefont: {size: 15}, 
-                tickfont: {size: 13}, 
-                fixedrange: true 
-            }, 
-            hoverlabel: {font: {size: 12}}, 
-            showlegend: false 
-        };
-    }
-    
-    function cdf(arr){ 
-        const s = Array.from(arr).sort((a,b)=>a-b), y = s.map((_,i)=>(i+1)/s.length); 
-        return {x:s, y}; 
-    }
-    
-    const cMain = cdf(totalPrimary);
-    const cRec = cdf(totalRecoverable);
-    
-    // CDF Main
-    Plotly.newPlot('cdf-main', [
-        {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-        { x: [totalP90, totalP50, totalP10], y: [0.1, 0.5, 0.9], mode: 'markers+text', 
-          marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, 
-          text: [`P90=${fmt(totalP90)}`, `P50=${fmt(totalP50)}`, `P10=${fmt(totalP10)}`], 
-          textposition: ['right center','left center','right center'], 
-          textfont: {size: 12}, 
-          hoverinfo: 'skip' 
-        }
-    ], baseLayout('Total Volume CDF (All Reservoirs)', 'Volume (MMBOE)', 'Cumulative Probability'), config);
-    
-    // Histogram Main
-    const histTrace = {
-        x: Array.from(totalPrimary), 
-        type: 'histogram', 
-        nbinsx: nbins, 
-        marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}
-    };
-    Plotly.newPlot('hist-main', [histTrace], baseLayout('Total Volume Histogram', 'Volume (MMBOE)', 'Frequency'), config).then(gd => {
-        const vLines = [totalP90, totalP50, totalP10].map(x => ({
-            type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', 
-            line:{dash:'dot', width:3, color:'#ED1C24'}
-        }));
-        Plotly.relayout(gd, {shapes: vLines});
-    });
-    
-    // CDF Recoverable
-    Plotly.newPlot('cdf-rec', [
-        {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-        { x: [totalRP90, totalRP50, totalRP10], y: [0.1, 0.5, 0.9], mode: 'markers+text', 
-          marker: {size: 10, color: '#ED1C24', symbol: 'circle'}, 
-          text: [`P90=${fmt(totalRP90)}`, `P50=${fmt(totalRP50)}`, `P10=${fmt(totalRP10)}`], 
-          textposition: ['right center','left center','right center'], 
-          textfont: {size: 12}, 
-          hoverinfo: 'skip' 
-        }
-    ], baseLayout('Recoverable Volume CDF (All Reservoirs)', 'Volume (MMBOE)', 'Cumulative Probability'), config);
-    
-    // Histogram Recoverable
-    const histRecTrace = {
-        x: Array.from(totalRecoverable), 
-        type: 'histogram', 
-        nbinsx: nbins, 
-        marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}
-    };
-    Plotly.newPlot('hist-rec', [histRecTrace], baseLayout('Recoverable Volume Histogram', 'Volume (MMBOE)', 'Frequency'), config).then(gd => {
-        const vLines = [totalRP90, totalRP50, totalRP10].map(x => ({
-            type:'line', x0:x, x1:x, y0:0, y1:1, yref:'paper', 
-            line:{dash:'dot', width:3, color:'#ED1C24'}
-        }));
-        Plotly.relayout(gd, {shapes: vLines});
-    });
-    
-    // Stacked contribution chart (tornado placeholder)
-    plotMultiReservoirContribution(reservoirResults);
-    
-    wireSyncedZoom();
+    // Simply call the filtered version with current view state
+    const showIndividual = (resultsViewState.reservoirView === 'individual');
+    displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, totalRecoverable, nbins, showIndividual);
 }
 
 function plotMultiReservoirContribution(reservoirResults) {
@@ -2323,6 +2325,333 @@ function plotMultiReservoirContribution(reservoirResults) {
     
     const config = { displayModeBar: true, responsive: true };
     Plotly.newPlot('tornado', traces, layout, config);
+}
+
+/* ===== Display Multi-Reservoir Results with Filters ===== */
+function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, totalRecoverable, nbins, showIndividual) {
+    console.log('Displaying filtered multi-reservoir results. Individual view:', showIndividual);
+    
+    // Helper functions
+    const fmt = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
+    const quantiles = arr => {
+        const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+        return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
+    };
+    
+    // Calculate statistics for total
+    const [totalP90, totalP50, totalP10] = quantiles(totalPrimary);
+    const [totalRP90, totalRP50, totalRP10] = quantiles(totalRecoverable);
+    
+    // Determine unit label
+    const unitLabel = resultsViewState.volumeUnit === 'native' ? 'Native Units' : 'MMBOE';
+    
+    // Update results title
+    document.getElementById('results-title').innerHTML = `Results (${unitLabel}) <span class="chip">P90 / P50 / P10</span>`;
+    
+    // Update summary table
+    const summaryTable = document.getElementById('summary');
+    const tbody = summaryTable.querySelector('tbody');
+    tbody.innerHTML = '';
+    
+    // Add total row
+    const totalRow = document.createElement('tr');
+    totalRow.style.fontWeight = 'bold';
+    totalRow.style.background = '#FFF8E5';
+    totalRow.innerHTML = `
+        <td>Total ${reservoirResults.length > 1 ? `(${reservoirResults.length} Reservoirs)` : ''}</td>
+        <td>${fmt(totalP90)}</td>
+        <td>${fmt(totalP50)}</td>
+        <td>${fmt(totalP10)}</td>
+        <td>—</td>
+    `;
+    tbody.appendChild(totalRow);
+    
+    // Add recoverable total row
+    const totalRecRow = document.createElement('tr');
+    totalRecRow.style.fontWeight = 'bold';
+    totalRecRow.style.background = '#FFF8E5';
+    totalRecRow.innerHTML = `
+        <td>Recoverable Total</td>
+        <td>${fmt(totalRP90)}</td>
+        <td>${fmt(totalRP50)}</td>
+        <td>${fmt(totalRP10)}</td>
+        <td>—</td>
+    `;
+    tbody.appendChild(totalRecRow);
+    
+    // Add separator
+    if (reservoirResults.length > 0) {
+        const separatorRow = document.createElement('tr');
+        separatorRow.innerHTML = '<td colspan="5" style="height:10px;background:#f5f5f5;"></td>';
+        tbody.appendChild(separatorRow);
+        
+        // Add individual reservoir rows
+        reservoirResults.forEach(res => {
+            const [p90, p50, p10] = quantiles(res.primary);
+            const [rp90, rp50, rp10] = quantiles(res.recoverable);
+            
+            // Calculate contribution percentage
+            const contribution = totalP50 > 0 ? (p50 / totalP50 * 100).toFixed(1) : 0;
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${res.name} <span style="color:var(--muted);font-size:12px;">(${res.fluid.toUpperCase()})</span></td>
+                <td>${fmt(p90)}</td>
+                <td>${fmt(p50)} <span style="color:var(--muted);font-size:11px;">(${contribution}%)</span></td>
+                <td>${fmt(p10)}</td>
+                <td>—</td>
+            `;
+            tbody.appendChild(row);
+            
+            const recRow = document.createElement('tr');
+            recRow.innerHTML = `
+                <td style="padding-left:24px;color:var(--muted);">↳ Recoverable</td>
+                <td>${fmt(rp90)}</td>
+                <td>${fmt(rp50)}</td>
+                <td>${fmt(rp10)}</td>
+                <td>—</td>
+            `;
+            tbody.appendChild(recRow);
+        });
+    }
+    
+    // Plot configuration
+    const config = {displayModeBar: true, responsive: true};
+    
+    function baseLayout(title, xLabel, yLabel) {
+        return {
+            autosize: true,
+            title: {text: title, font: {size: 16}, x: 0.05, xanchor: 'left'},
+            paper_bgcolor: '#fff',
+            plot_bgcolor: '#fff',
+            margin: {t: 70, l: 75, r: 46, b: 70},
+            xaxis: {
+                title: xLabel,
+                gridcolor: '#EFEFEF',
+                color: '#374151',
+                titlefont: {size: 15},
+                tickfont: {size: 13},
+                fixedrange: true
+            },
+            yaxis: {
+                title: yLabel,
+                gridcolor: '#EFEFEF',
+                color: '#374151',
+                titlefont: {size: 15},
+                tickfont: {size: 13},
+                fixedrange: true
+            },
+            hoverlabel: {font: {size: 12}},
+            showlegend: false
+        };
+    }
+    
+    function cdf(arr) {
+        const s = Array.from(arr).sort((a, b) => a - b), y = s.map((_, i) => (i + 1) / s.length);
+        return {x: s, y};
+    }
+    
+    const cMain = cdf(totalPrimary);
+    const cRec = cdf(totalRecoverable);
+    
+    // CDF Main - Aggregated or Stacked
+    if (!showIndividual) {
+        // Aggregated view: single CDF line
+        Plotly.newPlot('cdf-main', [
+            {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+            {
+                x: [totalP90, totalP50, totalP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(totalP90)}`, `P50=${fmt(totalP50)}`, `P10=${fmt(totalP10)}`],
+                textposition: ['right center', 'left center', 'right center'],
+                textfont: {size: 12},
+                hoverinfo: 'skip'
+            }
+        ], baseLayout('Total Volume CDF', `Volume (${unitLabel})`, 'Cumulative Probability'), config);
+    } else {
+        // Individual view: multiple CDF lines
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+        const cdfTraces = reservoirResults.map((res, i) => {
+            const c = cdf(res.primary);
+            return {
+                x: c.x, y: c.y,
+                mode: 'lines',
+                name: res.name,
+                line: {width: 2, color: colors[i % colors.length]}
+            };
+        });
+        
+        // Add total CDF
+        cdfTraces.push({
+            x: cMain.x, y: cMain.y,
+            mode: 'lines',
+            name: 'Total',
+            line: {width: 3, color: '#1F2937', dash: 'dash'}
+        });
+        
+        const layout = baseLayout('Volume CDF (By Reservoir)', `Volume (${unitLabel})`, 'Cumulative Probability');
+        layout.showlegend = true;
+        layout.legend = {x: 1.02, y: 1, xanchor: 'left', yanchor: 'top'};
+        
+        Plotly.newPlot('cdf-main', cdfTraces, layout, config);
+    }
+    
+    // Histogram Main - Aggregated or Stacked
+    if (!showIndividual) {
+        // Aggregated view: single histogram
+        const histTrace = {
+            x: Array.from(totalPrimary),
+            type: 'histogram',
+            nbinsx: nbins,
+            marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}
+        };
+        Plotly.newPlot('hist-main', [histTrace], baseLayout('Total Volume Histogram', `Volume (${unitLabel})`, 'Frequency'), config).then(gd => {
+            const vLines = [totalP90, totalP50, totalP10].map(x => ({
+                type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper',
+                line: {dash: 'dot', width: 3, color: '#ED1C24'}
+            }));
+            Plotly.relayout(gd, {shapes: vLines});
+        });
+    } else {
+        // Individual view: stacked histogram
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+        const histTraces = reservoirResults.map((res, i) => ({
+            x: Array.from(res.primary),
+            type: 'histogram',
+            name: res.name,
+            nbinsx: nbins,
+            marker: {color: colors[i % colors.length], line: {width: 0.5, color: '#fff'}}
+        }));
+        
+        const layout = baseLayout('Volume Histogram (Stacked)', `Volume (${unitLabel})`, 'Frequency');
+        layout.barmode = 'stack';
+        layout.showlegend = true;
+        layout.legend = {x: 1.02, y: 1, xanchor: 'left', yanchor: 'top'};
+        
+        Plotly.newPlot('hist-main', histTraces, layout, config);
+    }
+    
+    // CDF Recoverable - Similar logic
+    if (!showIndividual) {
+        Plotly.newPlot('cdf-rec', [
+            {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--green)'}},
+            {
+                x: [totalRP90, totalRP50, totalRP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+                marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+                text: [`P90=${fmt(totalRP90)}`, `P50=${fmt(totalRP50)}`, `P10=${fmt(totalRP10)}`],
+                textposition: ['right center', 'left center', 'right center'],
+                textfont: {size: 12},
+                hoverinfo: 'skip'
+            }
+        ], baseLayout('Recoverable Volume CDF', `Volume (${unitLabel})`, 'Cumulative Probability'), config);
+    } else {
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+        const cdfRecTraces = reservoirResults.map((res, i) => {
+            const c = cdf(res.recoverable);
+            return {
+                x: c.x, y: c.y,
+                mode: 'lines',
+                name: res.name,
+                line: {width: 2, color: colors[i % colors.length]}
+            };
+        });
+        
+        const cRecTotal = cdf(totalRecoverable);
+        cdfRecTraces.push({
+            x: cRecTotal.x, y: cRecTotal.y,
+            mode: 'lines',
+            name: 'Total',
+            line: {width: 3, color: '#1F2937', dash: 'dash'}
+        });
+        
+        const layout = baseLayout('Recoverable Volume CDF (By Reservoir)', `Volume (${unitLabel})`, 'Cumulative Probability');
+        layout.showlegend = true;
+        layout.legend = {x: 1.02, y: 1, xanchor: 'left', yanchor: 'top'};
+        
+        Plotly.newPlot('cdf-rec', cdfRecTraces, layout, config);
+    }
+    
+    // Histogram Recoverable - Similar logic
+    if (!showIndividual) {
+        const histRecTrace = {
+            x: Array.from(totalRecoverable),
+            type: 'histogram',
+            nbinsx: nbins,
+            marker: {color: 'var(--green-light)', line: {width: 0.8, color: 'var(--green-stroke)'}}
+        };
+        Plotly.newPlot('hist-rec', [histRecTrace], baseLayout('Recoverable Volume Histogram', `Volume (${unitLabel})`, 'Frequency'), config).then(gd => {
+            const vLines = [totalRP90, totalRP50, totalRP10].map(x => ({
+                type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper',
+                line: {dash: 'dot', width: 3, color: '#ED1C24'}
+            }));
+            Plotly.relayout(gd, {shapes: vLines});
+        });
+    } else {
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+        const histRecTraces = reservoirResults.map((res, i) => ({
+            x: Array.from(res.recoverable),
+            type: 'histogram',
+            name: res.name,
+            nbinsx: nbins,
+            marker: {color: colors[i % colors.length], line: {width: 0.5, color: '#fff'}}
+        }));
+        
+        const layout = baseLayout('Recoverable Volume Histogram (Stacked)', `Volume (${unitLabel})`, 'Frequency');
+        layout.barmode = 'stack';
+        layout.showlegend = true;
+        layout.legend = {x: 1.02, y: 1, xanchor: 'left', yanchor: 'top'};
+        
+        Plotly.newPlot('hist-rec', histRecTraces, layout, config);
+    }
+    
+    // Tornado chart (contribution breakdown) - only in aggregated view
+    if (!showIndividual && reservoirResults.length > 1) {
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+        const percentiles = ['P90', 'P50', 'P10'];
+        const traces = reservoirResults.map((res, i) => {
+            const [p90, p50, p10] = quantiles(res.primary);
+            return {
+                x: percentiles,
+                y: [p90, p50, p10],
+                name: res.name,
+                type: 'bar',
+                marker: {color: colors[i % colors.length]}
+            };
+        });
+        
+        const layout = {
+            title: {text: 'Contribution by Reservoir', font: {size: 16}, x: 0.05, xanchor: 'left'},
+            barmode: 'stack',
+            paper_bgcolor: '#fff',
+            plot_bgcolor: '#fff',
+            margin: {t: 86, l: 90, r: 46, b: 70},
+            xaxis: {
+                title: 'Percentile',
+                color: '#374151',
+                titlefont: {size: 15},
+                tickfont: {size: 13}
+            },
+            yaxis: {
+                title: `Volume (${unitLabel})`,
+                gridcolor: '#EFEFEF',
+                color: '#374151',
+                titlefont: {size: 15},
+                tickfont: {size: 13}
+            },
+            showlegend: true,
+            legend: {
+                x: 1.02,
+                y: 1,
+                xanchor: 'left',
+                yanchor: 'top'
+            }
+        };
+        
+        Plotly.newPlot('tornado', traces, layout, config);
+    } else if (showIndividual) {
+        // Clear tornado chart in individual view
+        document.getElementById('tornado').innerHTML = '<div style="padding:40px;text-align:center;color:#9CA3AF;">Contribution chart available in Aggregated view</div>';
+    }
 }
 
 /* ===== Multi-Reservoir Simulation ===== */
@@ -3755,6 +4084,29 @@ document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && helpModal.cla
 /* CSV Download Button Handlers */
 document.getElementById('downloadCsv').addEventListener('click', generateSummaryCSV);
 document.getElementById('downloadSamples').addEventListener('click', generateSamplesCSV);
+
+/* Results View Controls Handlers */
+document.getElementById('volumeUnit').addEventListener('change', (e) => {
+  resultsViewState.volumeUnit = e.target.value;
+  refreshResultsView();
+});
+
+document.getElementById('fluidFilter').addEventListener('change', (e) => {
+  resultsViewState.fluidFilter = e.target.value;
+  refreshResultsView();
+});
+
+document.querySelectorAll('.results-controls .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // Update active state
+    document.querySelectorAll('.results-controls .toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // Update state
+    resultsViewState.reservoirView = btn.dataset.view;
+    refreshResultsView();
+  });
+});
 
 /* Number of Reservoirs Handler */
 document.getElementById('numReservoirs').addEventListener('change', () => {
