@@ -630,7 +630,14 @@ function mountParams(){
   console.log('params container:', host);
   host.innerHTML='';
   PARAMS.forEach(p=>{
-    const unit = p.name==="Bo" ? "(RB/STB)" : p.name==="Bg" ? "(scf/SCF)" : p.name==="Rs" ? "(scf/bbl)" : p.name==="Rv" ? "(bbl/scf)" : isFrac(p.name) ? "(fraction)" : "";
+    const unit = p.name==="Bo" ? "(RB/STB)" 
+      : p.name==="Bg" ? "(scf/SCF)" 
+      : p.name==="Rs" ? "(scf/bbl)" 
+      : p.name==="Rv" ? "(bbl/scf)" 
+      : p.name==="Coal Density" ? "(g/cm³)" 
+      : p.name==="Gas Content" ? "(scf/ton)" 
+      : isFrac(p.name) ? "(fraction)" 
+      : "";
     const row = document.createElement('div');
     row.className = 'dist-row';
     row.setAttribute('data-param', p.name);
