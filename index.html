@@ -1058,6 +1058,134 @@ function mostLikely(type,v,wPerc){
   return NaN;
 }
 
+/* ===== Global storage for simulation results ===== */
+let lastSimulationData = null;
+
+/* ===== CSV Export Functions ===== */
+function downloadCSV(filename, content) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function generateSummaryCSV() {
+  if (!lastSimulationData) return;
+  
+  const {P90, P50, P10, RP90, RP50, RP10, detMidCase, detRecMidCase, 
+         pValMain, pValRec, labelSet} = lastSimulationData;
+  
+  let csv = `RangeRover Summary Report\n`;
+  csv += `Metric,${labelSet.primary}\n`;
+  csv += `Unit,${labelSet.unit}\n\n`;
+  
+  csv += `In-Place Volume\n`;
+  csv += `Statistic,Value (${labelSet.unit})\n`;
+  csv += `P90,${P90.toFixed(2)}\n`;
+  csv += `P50,${P50.toFixed(2)}\n`;
+  csv += `P10,${P10.toFixed(2)}\n`;
+  csv += `Deterministic Mid Case,${detMidCase.toFixed(2)}${pValMain ? ` (P${pValMain})` : ''}\n\n`;
+  
+  csv += `Recoverable Volume\n`;
+  csv += `Statistic,Value (${labelSet.unit})\n`;
+  csv += `P90,${RP90.toFixed(2)}\n`;
+  csv += `P50,${RP50.toFixed(2)}\n`;
+  csv += `P10,${RP10.toFixed(2)}\n`;
+  csv += `Deterministic Mid Case,${detRecMidCase.toFixed(2)}${pValRec ? ` (P${pValRec})` : ''}\n`;
+  
+  downloadCSV('rangerover_summary.csv', csv);
+}
+
+function generateSamplesCSV() {
+  if (!lastSimulationData) return;
+  
+  const {samplesData, labelSet, fluid} = lastSimulationData;
+  
+  // Build header
+  let headers = [];
+  let rows = [];
+  
+  // Determine which parameters to include based on geometry mode and fluid type
+  const geomMode = geometryMode();
+  
+  if (geomMode === 'grv') {
+    headers.push('GRV (acre-ft)');
+  } else {
+    headers.push('Area (acres)', 'Thickness (ft)');
+  }
+  
+  headers.push('Net to Gross (frac)', 'Porosity (frac)', 'Water Saturation (frac)');
+  
+  if (fluid === 'oil' || fluid === 'oilgas') {
+    headers.push('Bo (RB/STB)');
+    if (fluid === 'oilgas') headers.push('Rs (scf/STB)');
+  } else if (fluid === 'gas' || fluid === 'gasvo') {
+    headers.push('Bg (scf/SCF)');
+    if (fluid === 'gasvo') headers.push('Rv (STB/MMscf)');
+  }
+  
+  headers.push('Recovery Factor (frac)');
+  
+  // Add calculated fields
+  if (geomMode === 'grv') {
+    headers.push('HCPV (acre-ft)');
+  } else {
+    headers.push('GRV (acre-ft)', 'HCPV (acre-ft)');
+  }
+  
+  headers.push(`In-Place (${labelSet.unit})`, `Recoverable (${labelSet.unit})`);
+  
+  // Build rows
+  const n = samplesData.length;
+  for (let i = 0; i < n; i++) {
+    const row = samplesData[i];
+    let values = [];
+    
+    if (geomMode === 'grv') {
+      values.push(row.GRV.toFixed(2));
+    } else {
+      values.push(row.Area.toFixed(2), row.Thickness.toFixed(2));
+    }
+    
+    values.push(
+      row.NTG.toFixed(4),
+      row.PHI.toFixed(4),
+      row.SW.toFixed(4)
+    );
+    
+    if (fluid === 'oil' || fluid === 'oilgas') {
+      values.push(row.FVF.toFixed(4));
+      if (fluid === 'oilgas') values.push(row.Rs.toFixed(2));
+    } else if (fluid === 'gas' || fluid === 'gasvo') {
+      values.push(row.FVF.toFixed(4));
+      if (fluid === 'gasvo') values.push(row.Rv.toFixed(4));
+    }
+    
+    values.push(row.RF.toFixed(4));
+    
+    // Calculated fields
+    if (geomMode === 'grv') {
+      values.push(row.HCPV.toFixed(2));
+    } else {
+      values.push(row.GRV.toFixed(2), row.HCPV.toFixed(2));
+    }
+    
+    values.push(row.primary.toFixed(2), row.recoverable.toFixed(2));
+    
+    rows.push(values.join(','));
+  }
+  
+  let csv = headers.join(',') + '\n';
+  csv += rows.join('\n');
+  
+  downloadCSV('rangerover_samples.csv', csv);
+}
+
 /* ===== Simulation ===== */
 function runSimulation() {
     console.log('runSimulation called');
@@ -1355,6 +1483,46 @@ function runSimulation() {
   const tornadoData_og = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
   plotTornado(tornadoData_og, labelSet.unit);
   wireSyncedZoom();
+  
+  // Store simulation data for CSV export (oilgas case)
+  const samplesData_og = [];
+  for (let i = 0; i < n; i++) {
+    const row = {
+      NTG: NTG[i],
+      PHI: PHI[i],
+      SW: SW[i],
+      FVF: Bo[i],  // Bo for oil+gas
+      Rs: Rs[i],
+      RF: RF[i],
+      primary: primary[i],
+      recoverable: rec[i]
+    };
+    
+    if (useGRV) {
+      row.GRV = GRV[i];
+      row.HCPV = GRV[i] * NTG[i] * PHI[i] * (1 - SW[i]);
+    } else {
+      row.Area = A[i];
+      row.Thickness = H[i];
+      row.GRV = A[i] * H[i];
+      row.HCPV = A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]);
+    }
+    
+    samplesData_og.push(row);
+  }
+  
+  lastSimulationData = {
+    P90: P90_og, P50: P50_og, P10: P10_og, 
+    RP90: RP90_og, RP50: RP50_og, RP10: RP10_og,
+    detMidCase, detRecMidCase,
+    pValMain: pValMain_og, pValRec: pValRec_og,
+    labelSet, fluid, samplesData: samplesData_og
+  };
+  
+  // Enable CSV download buttons
+  document.getElementById('downloadCsv').disabled = false;
+  document.getElementById('downloadSamples').disabled = false;
+  
         return;
   } else if (fluid === 'gasvo') {
     metric = resultType || 'total';
@@ -1520,6 +1688,46 @@ function runSimulation() {
   const tornadoData_gv = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
   plotTornado(tornadoData_gv, labelSet.unit);
   wireSyncedZoom();
+  
+  // Store simulation data for CSV export (gasvo case)
+  const samplesData_gv = [];
+  for (let i = 0; i < n; i++) {
+    const row = {
+      NTG: NTG[i],
+      PHI: PHI[i],
+      SW: SW[i],
+      FVF: Bg[i],  // Bg for gas+vaporized oil
+      Rv: Rv[i],
+      RF: RF[i],
+      primary: primary[i],
+      recoverable: rec[i]
+    };
+    
+    if (useGRV) {
+      row.GRV = GRV[i];
+      row.HCPV = GRV[i] * NTG[i] * PHI[i] * (1 - SW[i]);
+    } else {
+      row.Area = A[i];
+      row.Thickness = H[i];
+      row.GRV = A[i] * H[i];
+      row.HCPV = A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]);
+    }
+    
+    samplesData_gv.push(row);
+  }
+  
+  lastSimulationData = {
+    P90: P90_gv, P50: P50_gv, P10: P10_gv, 
+    RP90: RP90_gv, RP50: RP50_gv, RP10: RP10_gv,
+    detMidCase, detRecMidCase,
+    pValMain: pValMain_gv, pValRec: pValRec_gv,
+    labelSet, fluid, samplesData: samplesData_gv
+  };
+  
+  // Enable CSV download buttons
+  document.getElementById('downloadCsv').disabled = false;
+  document.getElementById('downloadSamples').disabled = false;
+  
     return;
   } else if (fluid === 'oil' || fluid === 'gas') {
         const useGRV = geometryMode() === 'grv';
@@ -1736,6 +1944,44 @@ function runSimulation() {
   const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);
   plotTornado(tornadoData, labelSet.unit);
   wireSyncedZoom();
+  
+  // Store simulation data for CSV export
+  const samplesData = [];
+  for (let i = 0; i < n; i++) {
+    const row = {
+      NTG: NTG[i],
+      PHI: PHI[i],
+      SW: SW[i],
+      FVF: FVF[i],
+      RF: RF[i],
+      primary: primary[i],
+      recoverable: rec[i]
+    };
+    
+    if (useGRV) {
+      row.GRV = GRV[i];
+      row.HCPV = GRV[i] * NTG[i] * PHI[i] * (1 - SW[i]);
+    } else {
+      row.Area = A[i];
+      row.Thickness = H[i];
+      row.GRV = A[i] * H[i];
+      row.HCPV = A[i] * H[i] * NTG[i] * PHI[i] * (1 - SW[i]);
+    }
+    
+    samplesData.push(row);
+  }
+  
+  lastSimulationData = {
+    P90, P50, P10, RP90, RP50, RP10, 
+    detMidCase, detRecMidCase,
+    pValMain: pValMain2, pValRec: pValRec2,
+    labelSet, fluid, samplesData
+  };
+  
+  // Enable CSV download buttons
+  document.getElementById('downloadCsv').disabled = false;
+  document.getElementById('downloadSamples').disabled = false;
+  
         return;
     }
 }
@@ -1981,6 +2227,10 @@ helpBtn.addEventListener('click', ()=>{ helpModal.classList.add('open'); helpMod
 helpClose.addEventListener('click', ()=>{ helpModal.classList.remove('open'); helpModal.setAttribute('aria-hidden','true'); });
 helpModal.addEventListener('click', (e)=>{ if(e.target===helpModal){ helpClose.click(); } });
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && helpModal.classList.contains('open')) helpClose.click(); });
+
+/* CSV Download Button Handlers */
+document.getElementById('downloadCsv').addEventListener('click', generateSummaryCSV);
+document.getElementById('downloadSamples').addEventListener('click', generateSamplesCSV);
 
 /* Bootstrap */
 mountGeometrySelector();
