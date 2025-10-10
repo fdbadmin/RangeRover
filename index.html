@@ -1,4 +1,6 @@
-<!doctype html>
+Zxc vrb'
+ asdfg l;'
+ <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -1748,7 +1750,12 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
       const {low, high} = lowHighFrom(params[idx].type, params[idx].raw);
       const name = params[idx].name;
       const conv = convTriplet(name, [low, NaN, high]);
-      return {low: conv[0], high: conv[2]};
+      // Apply physical bounds to tornado low/high values
+      const bounds = boundsFor(name, fluid);
+      return {
+        low: Math.max(bounds.min, Math.min(bounds.max, conv[0])),
+        high: Math.max(bounds.min, Math.min(bounds.max, conv[2]))
+      };
     }
     const idxByName = (name) => params.findIndex(p=>p.name===name);
     const hasGRV = idxByName('GRV') !== -1;
