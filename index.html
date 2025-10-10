@@ -378,7 +378,7 @@
         <li><b>Thickness</b>: m or ft (internally converted to ft).</li>
         <li><b>NTG</b>, <b>Porosity</b>, <b>Water Saturation</b> are treated as <b>fractions</b> (0–1). Previews display in % for readability.</li>
   <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas; <b>Rs</b> (scf/bbl) with <b>Oil + Solution Gas</b>; <b>Rv</b> (bbl/scf) with <b>Gas + Vaporized Oil</b>.</li>
-  <li><b>Coal Seam Gas</b> uses <b>Coal Density</b> (g/cm³, typically 1.3–1.5) and <b>Gas Content</b> (scf/ton) instead of porosity/saturation parameters.</li>
+  <li><b>Coal Seam Gas</b> uses <b>Coal Density</b> (g/cm³, typically 1.3–1.5) and <b>Gas Content</b> (m³/ton) instead of porosity/saturation parameters.</li>
       </ul>
 
       <h3 id="dists">4) Distributions</h3>
@@ -508,7 +508,7 @@ function labelsFor(fluid){
   if(fluid==='csg'){
     return { primary:"GIIP", unit:"BCF", xMain:"GIIP (BCF)", xRec:"Recoverable (BCF)",
       cdfTitle:"GIIP CDF", histTitle:"GIIP Histogram", metricRec:"Recoverable GIIP",
-      formula:'Formula (Coal Seam Gas): <code>GIIP = 1,359.77 × A × h × ρ<sub>coal</sub> × G<sub>c</sub></code> where ρ<sub>coal</sub> = coal density (g/cm³), G<sub>c</sub> = gas content (scf/ton). Result in SCF; plots in BCF.'
+      formula:'Formula (Coal Seam Gas): <code>GIIP = 48,013 × A × h × ρ<sub>coal</sub> × G<sub>c</sub></code> where ρ<sub>coal</sub> = coal density (g/cm³), G<sub>c</sub> = gas content (m³/ton). Result in SCF; plots in BCF.'
     };
   }
   if(fluid==='gasvo'){
@@ -573,7 +573,7 @@ function boundsFor(name,fluid){
   if(name==='Bg') return {min:1e-9, max:Infinity};
   if(name==='Rv') return {min:0, max:Infinity};
   if(name==='Coal Density') return {min:0.1, max:Infinity}; // g/cm³, typically 1.3-1.5
-  if(name==='Gas Content') return {min:0, max:Infinity}; // scf/ton
+  if(name==='Gas Content') return {min:0, max:Infinity}; // m³/ton
   return {min:-Infinity, max:Infinity};
 }
 function sampleNormalTrunc(r, mean, std, min, max){
@@ -635,7 +635,7 @@ function mountParams(){
       : p.name==="Rs" ? "(scf/bbl)" 
       : p.name==="Rv" ? "(bbl/scf)" 
       : p.name==="Coal Density" ? "(g/cm³)" 
-      : p.name==="Gas Content" ? "(scf/ton)" 
+      : p.name==="Gas Content" ? "(m³/ton)" 
       : isFrac(p.name) ? "(fraction)" 
       : "";
     const row = document.createElement('div');
@@ -1145,7 +1145,7 @@ function generateSamplesCSV() {
   }
   
   if (fluid === 'csg') {
-    headers.push('Coal Density (g/cm³)', 'Gas Content (scf/ton)');
+    headers.push('Coal Density (g/cm³)', 'Gas Content (m³/ton)');
   } else {
     headers.push('Net to Gross (frac)', 'Porosity (frac)', 'Water Saturation (frac)');
   }
@@ -1828,9 +1828,9 @@ function runSimulation() {
     
     for (let i = 0; i < n; i++) {
       const AH = useGRV ? GRV[i] : (A[i] * H[i]);
-      // CSG formula: GIIP (scf) = 1359.7 × A (acres) × h (ft) × ρ_coal (lb/ft³) × Gc (scf/ton)
-      // Conversion factor: 1 acre-ft × 1 lb/ft³ = 1359.7 tons
-      primary[i] = (1359.7 * AH * CoalDensity[i] * GasContent[i]) / 1e9; // Convert to BCF
+      // CSG formula: GIIP (scf) = 48,013 × A (acres) × h (ft) × ρ_coal (g/cm³) × Gc (m³/ton)
+      // Conversion: 1 acre-ft × 1 g/cm³ = 1,359.77 tons; 1 m³ = 35.3147 scf → factor = 48,013
+      primary[i] = (48013 * AH * CoalDensity[i] * GasContent[i]) / 1e9; // Convert to BCF
       rec[i] = primary[i] * RF[i];
     }
     
@@ -1840,7 +1840,7 @@ function runSimulation() {
     const detAH_csg = useGRV
       ? mostLikely(dists[iGRV].type, dists[iGRV].v, dists[iGRV].wPerc)
       : (mostLikely(dists[iArea].type, dists[iArea].v, dists[iArea].wPerc) * mostLikely(dists[iThick].type, dists[iThick].v, dists[iThick].wPerc));
-    const detMidCase = (1359.7 * detAH_csg
+    const detMidCase = (48013 * detAH_csg
       * mostLikely(dists[iDensity].type, dists[iDensity].v, dists[iDensity].wPerc)
       * mostLikely(dists[iGc].type, dists[iGc].v, dists[iGc].wPerc)) / 1e9;
     const detRecMidCase = detMidCase * mostLikely(rfType, rfRaw, rfPerc);
@@ -2251,7 +2251,7 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
     } else if (fluid === 'gas') {
       base = (43560 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bg')) / 1e9;
     } else if (fluid === 'csg') {
-      base = (1359.7 * geomBase() * baseVal('Coal Density') * baseVal('Gas Content')) / 1e9;
+      base = (48013 * geomBase() * baseVal('Coal Density') * baseVal('Gas Content')) / 1e9;
     } else if (fluid === 'oilgas') {
       if (metric === 'stoiip') {
         base = (7758 * geomBase() * baseVal('Net to Gross') * baseVal('Porosity') * (1 - baseVal('Water Saturation')) / baseVal('Bo')) / 1e6;
@@ -2295,8 +2295,8 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
           lowVal = (43560 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bg', idx, low, high, 'low')) / 1e9;
           highVal = (43560 * geom(idx, low, high, 'high') * factor('Net to Gross', idx, low, high, 'high') * factor('Porosity', idx, low, high, 'high') * (1 - factor('Water Saturation', idx, low, high, 'high')) / factor('Bg', idx, low, high, 'high')) / 1e9;
         } else if (fluid === 'csg') {
-          lowVal = (1359.7 * geom(idx, low, high, 'low') * factor('Coal Density', idx, low, high, 'low') * factor('Gas Content', idx, low, high, 'low')) / 1e9;
-          highVal = (1359.7 * geom(idx, low, high, 'high') * factor('Coal Density', idx, low, high, 'high') * factor('Gas Content', idx, low, high, 'high')) / 1e9;
+          lowVal = (48013 * geom(idx, low, high, 'low') * factor('Coal Density', idx, low, high, 'low') * factor('Gas Content', idx, low, high, 'low')) / 1e9;
+          highVal = (48013 * geom(idx, low, high, 'high') * factor('Coal Density', idx, low, high, 'high') * factor('Gas Content', idx, low, high, 'high')) / 1e9;
         } else if (fluid === 'oilgas') {
           if (metric === 'stoiip') {
             lowVal = (7758 * geom(idx, low, high, 'low') * factor('Net to Gross', idx, low, high, 'low') * factor('Porosity', idx, low, high, 'low') * (1 - factor('Water Saturation', idx, low, high, 'low')) / factor('Bo', idx, low, high, 'low')) / 1e6;
