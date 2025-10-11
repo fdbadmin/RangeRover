@@ -108,6 +108,20 @@
   .plot-tornado{
     min-height: 420px; aspect-ratio: 16 / 7;
     max-width:65%; margin-left:0; margin-right:auto; /* narrower & left-aligned */
+    overflow: visible; /* Allow tornado selector to be visible */
+    padding: 0; /* Remove padding so selector can be full-width */
+    display: flex;
+    flex-direction: column;
+  }
+  #tornado-selector {
+    flex-shrink: 0 !important;
+    display: flex !important;
+    z-index: 10;
+  }
+  .plot-content {
+    flex: 1;
+    min-height: 0;
+    padding: 20px;
   }
   .chart-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin:6px 0 0}
 
@@ -423,7 +437,7 @@
         <!-- Reservoir sections will be dynamically inserted here -->
       </div>
 
-      <div style="margin-top:6px">
+      <div id="global-rf-section" style="margin-top:6px">
         <h4 class="section-title">Recovery Factor <span class="chip">fraction</span></h4>
         <div class="dist-row" id="rf-row">
           <label>Distribution</label>
@@ -457,7 +471,7 @@
         </div>
       </div>
 
-      <div class="btns">
+      <div class="btns" id="global-buttons">
         <button class="primary" id="run">Run Simulation</button>
         <button id="reset">Reset</button>
         <button class="good" id="downloadCsv" disabled>Download summary CSV</button>
@@ -1229,14 +1243,54 @@ function mountReservoirSections() {
     paramsDiv.className = 'reservoir-params';
     content.appendChild(paramsDiv);
     
+    // Add action buttons section (Run Simulation, Reset, CSV downloads)
+    const buttonsSection = document.createElement('div');
+    buttonsSection.className = 'btns';
+    buttonsSection.style.marginTop = '20px';
+    buttonsSection.style.marginBottom = '10px';
+    buttonsSection.innerHTML = `
+      <button class="primary" id="run-r${reservoir.id}">Run Simulation</button>
+      <button id="reset-r${reservoir.id}">Reset</button>
+      <button class="good" id="downloadCsv-r${reservoir.id}" disabled>Download summary CSV</button>
+      <button class="good" id="downloadSamples-r${reservoir.id}" disabled>Download samples CSV</button>
+    `;
+    content.appendChild(buttonsSection);
+    
+    // Add error message area
+    const errorDiv = document.createElement('div');
+    errorDiv.id = `error-r${reservoir.id}`;
+    errorDiv.className = 'err';
+    errorDiv.setAttribute('role', 'alert');
+    content.appendChild(errorDiv);
+    
+    // Add formula section for this reservoir's fluid type
+    const formulaDiv = document.createElement('div');
+    formulaDiv.className = 'footer';
+    formulaDiv.style.marginTop = '10px';
+    
+    // Set formula based on fluid type
+    let formulaText = '';
+    if (reservoir.fluid === 'oil') {
+      formulaText = 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).';
+    } else if (reservoir.fluid === 'gas') {
+      formulaText = 'Formula (Gas): <code>GIIP = 43560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).';
+    } else if (reservoir.fluid === 'csg') {
+      formulaText = 'Formula (CSG): <code>GIIP = 48013 × A × h × Coal Density × Gas Content</code> (SCF; plots in BCF).';
+    } else if (reservoir.fluid === 'oilgas') {
+      formulaText = 'Formula (Oil+Gas): <code>Total = STOIIP + GIIP (solution gas)</code> (plots in MMBOE).';
+    } else if (reservoir.fluid === 'gasvo') {
+      formulaText = 'Formula (Gas+VO): <code>Total = GIIP + Vaporized Oil</code> (plots in MMBOE).';
+    }
+    
+    formulaDiv.innerHTML = formulaText;
+    content.appendChild(formulaDiv);
+    
     // Add distribution previews section for this reservoir
     const previewsSection = document.createElement('div');
     previewsSection.className = 'previews';
     previewsSection.style.marginTop = '20px';
     previewsSection.innerHTML = `
       <h4 class="section-title">Distribution previews <span class="chip">live</span></h4>
-      <button onclick="renderReservoirPreviews('${reservoir.id}')" style="margin-bottom:10px; padding:6px 12px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer;">🔄 Refresh Previews</button>
-      <button onclick="testPlotly('${reservoir.id}')" style="margin-bottom:10px; margin-left:10px; padding:6px 12px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer;">🧪 Test Plotly</button>
       <div id="previewGrid-${reservoir.id}" class="preview-grid"></div>
     `;
     content.appendChild(previewsSection);
@@ -1252,6 +1306,35 @@ function mountReservoirSections() {
   // NOW mount parameters for each reservoir (after DOM is ready)
   multiReservoirData.forEach(reservoir => {
     mountReservoirParams(reservoir.id);
+  });
+  
+  // Apply default values to all reservoirs
+  multiReservoirData.forEach(reservoir => {
+    prefillDefaultsForReservoir(reservoir.id);
+  });
+  
+  // Attach event listeners to each reservoir's buttons
+  multiReservoirData.forEach(reservoir => {
+    const runBtn = document.getElementById(`run-r${reservoir.id}`);
+    const resetBtn = document.getElementById(`reset-r${reservoir.id}`);
+    const downloadCsvBtn = document.getElementById(`downloadCsv-r${reservoir.id}`);
+    const downloadSamplesBtn = document.getElementById(`downloadSamples-r${reservoir.id}`);
+    
+    if (runBtn) {
+      runBtn.addEventListener('click', runSimulation);
+    }
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        prefillDefaultsForReservoir(reservoir.id);
+        renderReservoirPreviews(reservoir.id, true);
+      });
+    }
+    if (downloadCsvBtn) {
+      downloadCsvBtn.addEventListener('click', generateSummaryCSV);
+    }
+    if (downloadSamplesBtn) {
+      downloadSamplesBtn.addEventListener('click', generateSamplesCSV);
+    }
   });
 }
 
@@ -1342,6 +1425,74 @@ function mountReservoirParams(reservoirId) {
     weights.querySelectorAll('input').forEach(w=>w.addEventListener('input', renderDistPreviewsDebounced));
     refresh();
   });
+  
+  // Add Recovery Factor row at the end
+  const rfRow = document.createElement('div');
+  rfRow.className = 'dist-row';
+  rfRow.setAttribute('data-param', 'Recovery Factor');
+  rfRow.setAttribute('data-reservoir', reservoirId);
+  rfRow.innerHTML = `
+    <label>Recovery Factor <span style="color:var(--muted);font-size:12px;">(fraction)</span></label>
+    <div class="field">
+      <div class="slabel">Distribution</div>
+      <select class="dist-type">
+        <option>Discrete</option><option>Triangular</option><option>Uniform</option>
+        <option>PERT</option>
+        <option selected>Normal</option><option>Known Distribution</option>
+      </select>
+    </div>
+    <div class="field">
+      <div class="slabel l0">${DIST_LABELS['Normal'][0]}</div>
+      <input class="v v0" type="number" step="any">
+    </div>
+    <div class="field">
+      <div class="slabel l1">${DIST_LABELS['Normal'][1]}</div>
+      <input class="v v1" type="number" step="any">
+    </div>
+    <div class="field">
+      <div class="slabel l2">${DIST_LABELS['Normal'][2]}</div>
+      <input class="v v2" type="number" step="any">
+    </div>`;
+  host.appendChild(rfRow);
+  
+  const rfWeights = addWeightsRow(rfRow, 'Recovery_Factor');
+  const rfSel = rfRow.querySelector('.dist-type');
+  const rfInputs = [...rfRow.querySelectorAll('input.v')];
+  const rfLabs = [rfRow.querySelector('.l0'), rfRow.querySelector('.l1'), rfRow.querySelector('.l2')];
+  
+  function refreshRF() {
+    const L = DIST_LABELS[rfSel.value];
+    rfLabs.forEach((lab, i) => {
+      lab.textContent = L[i];
+      const ignore = L[i].includes('(ignore)');
+      lab.classList.toggle('disabled', ignore);
+      const fieldDiv = rfLabs[i].closest('.field');
+      if (ignore) {
+        rfInputs[i].disabled = true;
+        rfInputs[i].value = '';
+        fieldDiv && fieldDiv.classList.add('hidden-field');
+      } else {
+        rfInputs[i].disabled = false;
+        fieldDiv && fieldDiv.classList.remove('hidden-field');
+      }
+    });
+    const rowEl = rfSel.closest('.dist-row');
+    if (rfSel.value === 'Discrete') {
+      rfWeights.classList.remove('hidden');
+      rfWeights.classList.add('show-sep');
+      rowEl && rowEl.classList.add('with-weights');
+    } else {
+      rfWeights.classList.add('hidden');
+      rfWeights.classList.remove('show-sep');
+      rowEl && rowEl.classList.remove('with-weights');
+    }
+    renderDistPreviewsDebounced();
+  }
+  
+  rfSel.addEventListener('change', refreshRF);
+  rfInputs.forEach(inp => inp.addEventListener('input', renderDistPreviewsDebounced));
+  rfWeights.querySelectorAll('input').forEach(w => w.addEventListener('input', renderDistPreviewsDebounced));
+  refreshRF();
 }
 
 function labelsForUI(){ return labelsFor(FLUID.value); }
@@ -1455,6 +1606,44 @@ function updateFluidUI(){
 }
 FLUID.addEventListener('change', updateFluidUI);
 
+/* Reset defaults for a specific reservoir */
+function prefillDefaultsForReservoir(reservoirId) {
+  const reservoir = multiReservoirData.find(r => r.id === reservoirId);
+  if (!reservoir) return;
+  
+  const fluidType = reservoir.fluid;
+  let D;
+  
+  if(fluidType === 'gas') {
+    D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"__RF":[0.5,0.1]};
+  } else if(fluidType === 'oilgas') {
+    D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"Rs":[800,100],"__RF":[0.5,0.1]};
+  } else if(fluidType === 'gasvo') {
+    D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"Rv":[0.001,0.0002],"__RF":[0.5,0.1]};
+  } else if(fluidType === 'csg') {
+    D = {"Area":[100,20],"Thickness":[20,5],"Coal Density":[1.4,0.1],"Gas Content":[15,3],"__RF":[0.5,0.1]};
+  } else {
+    D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"__RF":[0.5,0.1]};
+  }
+  
+  // Apply defaults to this reservoir's parameters
+  const container = document.getElementById(`params-${reservoirId}`);
+  if (container) {
+    container.querySelectorAll('.dist-row').forEach(row=>{
+      const name=row.getAttribute('data-param');
+      const pair = name === 'Recovery Factor' ? D["__RF"] : D[name];
+      const sel=row.querySelector('.dist-type'); sel.value='Normal';
+      const v0=row.querySelector('.v0'), v1=row.querySelector('.v1'), v2=row.querySelector('.v2');
+      if(pair){v0.value=pair[0]; v1.value=pair[1];} else {v0.value=''; v1.value='';}
+      v2.value=''; sel.dispatchEvent(new Event('change'));
+      const wrow = row.nextElementSibling;
+      if(wrow && wrow.classList.contains('weights-row')){
+        const ws = wrow.querySelectorAll('input'); ws[0].value='33'; ws[1].value='33'; ws[2].value='34';
+      }
+    });
+  }
+}
+
 /* Defaults so it's runnable */
 function prefillDefaults(){
   // Check if we're in multi-reservoir mode
@@ -1483,7 +1672,8 @@ function prefillDefaults(){
       if (container) {
         container.querySelectorAll('.dist-row').forEach(row=>{
           const name=row.getAttribute('data-param');
-          const pair=D[name]; const sel=row.querySelector('.dist-type'); sel.value='Normal';
+          const pair = name === 'Recovery Factor' ? D["__RF"] : D[name];
+          const sel=row.querySelector('.dist-type'); sel.value='Normal';
           const v0=row.querySelector('.v0'), v1=row.querySelector('.v1'), v2=row.querySelector('.v2');
           if(pair){v0.value=pair[0]; v1.value=pair[1];} else {v0.value=''; v1.value='';}
           v2.value=''; sel.dispatchEvent(new Event('change'));
@@ -1584,51 +1774,6 @@ function discreteValsAndWeights(rawVals, weightPercents){
 
 /* ===== Preview rendering ===== */
 // Test function to verify Plotly is working
-function testPlotly(reservoirId) {
-  console.log('=== TEST PLOTLY called for reservoir:', reservoirId);
-  const numericId = typeof reservoirId === 'string' ? parseInt(reservoirId) : reservoirId;
-  const gridId = `previewGrid-${numericId}`;
-  const grid = document.getElementById(gridId);
-  
-  if (!grid) {
-    alert('Grid not found: ' + gridId);
-    return;
-  }
-  
-  grid.innerHTML = '';
-  
-  // Create a simple test div
-  const testDiv = document.createElement('div');
-  testDiv.id = 'test-plot';
-  testDiv.className = 'mini';
-  testDiv.style.width = '100%';
-  testDiv.style.height = '240px';
-  grid.appendChild(testDiv);
-  
-  // Try to render a simple plot
-  try {
-    const trace = {
-      x: [1, 2, 3, 4, 5],
-      y: [1, 4, 2, 5, 3],
-      mode: 'lines',
-      type: 'scatter'
-    };
-    
-    const layout = {
-      title: 'Test Plot',
-      autosize: true,
-      margin: {t: 40, l: 56, r: 28, b: 42}
-    };
-    
-    Plotly.newPlot('test-plot', [trace], layout, {displayModeBar: false, responsive: true});
-    console.log('✓ Test plot rendered successfully!');
-    alert('Test plot rendered! Check if you can see it.');
-  } catch(err) {
-    console.error('✗ Error rendering test plot:', err);
-    alert('Error: ' + err.message);
-  }
-}
-
 function renderDistPreviewsDebounced(){ clearTimeout(previewTimer); previewTimer=setTimeout(renderDistPreviews, 180); }
 AREA.addEventListener('change', renderDistPreviewsDebounced);
 THICK.addEventListener('change', renderDistPreviewsDebounced);
@@ -2337,10 +2482,26 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
         const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
         return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
     };
+    const percentile = (arr, val) => {
+        const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b);
+        const n = s.length;
+        if (n === 0 || !Number.isFinite(val)) return NaN;
+        let count = 0;
+        for (let i = 0; i < n; i++) { if (s[i] <= val) count++; }
+        return Math.round(100 * (1 - count / n));
+    };
     
     // Calculate statistics for total
     const [totalP90, totalP50, totalP10] = quantiles(totalPrimary);
     const [totalRP90, totalRP50, totalRP10] = quantiles(totalRecoverable);
+    
+    // Calculate total deterministic mid case
+    const totalDetMidCase = reservoirResults.reduce((sum, res) => sum + (res.detMidCase || 0), 0);
+    const totalDetRecMidCase = reservoirResults.reduce((sum, res) => sum + (res.detRecMidCase || 0), 0);
+    
+    // Calculate P-values for deterministic
+    const pValTotal = percentile(totalPrimary, totalDetMidCase);
+    const pValTotalRec = percentile(totalRecoverable, totalDetRecMidCase);
     
     // Determine unit label
     const unitLabel = resultsViewState.volumeUnit === 'native' ? 'Native Units' : 'MMBOE';
@@ -2362,7 +2523,7 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
         <td>${fmt(totalP90)}</td>
         <td>${fmt(totalP50)}</td>
         <td>${fmt(totalP10)}</td>
-        <td>—</td>
+        <td>${Number.isFinite(pValTotal) ? `${fmt(totalDetMidCase)} (P${pValTotal})` : fmt(totalDetMidCase)}</td>
     `;
     tbody.appendChild(totalRow);
     
@@ -2375,7 +2536,7 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
         <td>${fmt(totalRP90)}</td>
         <td>${fmt(totalRP50)}</td>
         <td>${fmt(totalRP10)}</td>
-        <td>—</td>
+        <td>${Number.isFinite(pValTotalRec) ? `${fmt(totalDetRecMidCase)} (P${pValTotalRec})` : fmt(totalDetRecMidCase)}</td>
     `;
     tbody.appendChild(totalRecRow);
     
@@ -2393,13 +2554,17 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
             // Calculate contribution percentage
             const contribution = totalP50 > 0 ? (p50 / totalP50 * 100).toFixed(1) : 0;
             
+            // Calculate P-values for deterministic
+            const pValRes = percentile(res.primary, res.detMidCase);
+            const pValResRec = percentile(res.recoverable, res.detRecMidCase);
+            
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${res.name} <span style="color:var(--muted);font-size:12px;">(${res.fluid.toUpperCase()})</span></td>
                 <td>${fmt(p90)}</td>
                 <td>${fmt(p50)} <span style="color:var(--muted);font-size:11px;">(${contribution}%)</span></td>
                 <td>${fmt(p10)}</td>
-                <td>—</td>
+                <td>${Number.isFinite(pValRes) ? `${fmt(res.detMidCase)} (P${pValRes})` : fmt(res.detMidCase)}</td>
             `;
             tbody.appendChild(row);
             
@@ -2409,7 +2574,7 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
                 <td>${fmt(rp90)}</td>
                 <td>${fmt(rp50)}</td>
                 <td>${fmt(rp10)}</td>
-                <td>—</td>
+                <td>${Number.isFinite(pValResRec) ? `${fmt(res.detRecMidCase)} (P${pValResRec})` : fmt(res.detRecMidCase)}</td>
             `;
             tbody.appendChild(recRow);
         });
@@ -2466,6 +2631,14 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
                 textposition: ['right center', 'left center', 'right center'],
                 textfont: {size: 12},
                 hoverinfo: 'skip'
+            },
+            {
+                x: [totalDetMidCase], y: [1 - pValTotal/100], mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(totalDetMidCase)}`],
+                textposition: 'top right',
+                textfont: {size: 12},
+                hoverinfo: 'skip'
             }
         ], baseLayout('Total Volume CDF', `Volume (${unitLabel})`, 'Cumulative Probability'), config);
     } else {
@@ -2510,6 +2683,11 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
                 type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper',
                 line: {dash: 'dot', width: 3, color: '#ED1C24'}
             }));
+            // Add deterministic mid case line
+            vLines.push({
+                type: 'line', x0: totalDetMidCase, x1: totalDetMidCase, y0: 0, y1: 1, yref: 'paper',
+                line: {dash: 'dot', width: 3, color: 'var(--mid)'}
+            });
             Plotly.relayout(gd, {shapes: vLines});
         });
     } else {
@@ -2540,6 +2718,14 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
                 marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
                 text: [`P90=${fmt(totalRP90)}`, `P50=${fmt(totalRP50)}`, `P10=${fmt(totalRP10)}`],
                 textposition: ['right center', 'left center', 'right center'],
+                textfont: {size: 12},
+                hoverinfo: 'skip'
+            },
+            {
+                x: [totalDetRecMidCase], y: [1 - pValTotalRec/100], mode: 'markers+text',
+                marker: {size: 12, color: 'var(--mid)', symbol: 'diamond'},
+                text: [`Det. Mid Case=${fmt(totalDetRecMidCase)}`],
+                textposition: 'top right',
                 textfont: {size: 12},
                 hoverinfo: 'skip'
             }
@@ -2584,6 +2770,11 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
                 type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper',
                 line: {dash: 'dot', width: 3, color: '#ED1C24'}
             }));
+            // Add deterministic mid case line
+            vLines.push({
+                type: 'line', x0: totalDetRecMidCase, x1: totalDetRecMidCase, y0: 0, y1: 1, yref: 'paper',
+                line: {dash: 'dot', width: 3, color: 'var(--mid)'}
+            });
             Plotly.relayout(gd, {shapes: vLines});
         });
     } else {
@@ -2604,10 +2795,103 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
         Plotly.newPlot('hist-rec', histRecTraces, layout, config);
     }
     
-    // Tornado chart (contribution breakdown) - only in aggregated view
+    // Tornado chart (contribution breakdown or per-reservoir sensitivity) - only in aggregated view
+    console.log('🎯 Tornado selector check: showIndividual =', showIndividual, ', reservoirResults.length =', reservoirResults.length);
     if (!showIndividual && reservoirResults.length > 1) {
+        console.log('✅ Creating/updating tornado selector');
+        // Add tornado selector if not already present
+        const tornadoDiv = document.getElementById('tornado');
+        let selectorDiv = document.getElementById('tornado-selector');
+        
+        if (!selectorDiv) {
+            console.log('📝 Creating NEW tornado selector and chart wrapper');
+            
+            // Create selector
+            selectorDiv = document.createElement('div');
+            selectorDiv.id = 'tornado-selector';
+            selectorDiv.style.cssText = 'padding:16px 20px; background:#F9FAFB; border-bottom:2px solid #3B82F6; display:flex; align-items:center; gap:10px; flex-shrink:0; border-top-left-radius:12px; border-top-right-radius:12px;';
+            selectorDiv.innerHTML = `
+                <label style="font-weight:600; color:#1F2937; font-size:15px;">Tornado View:</label>
+                <select id="tornado-view-select" style="padding:8px 12px; border:2px solid #3B82F6; border-radius:6px; font-size:14px; background:white; cursor:pointer; font-weight:500;">
+                    <option value="contribution">Contribution by Reservoir</option>
+                    <option value="combined">Combined (All Reservoirs)</option>
+                    ${reservoirResults.map(res => `<option value="res-${res.id}">${res.name} - Sensitivity</option>`).join('')}
+                </select>
+            `;
+            
+            // Create chart content wrapper if it doesn't exist
+            if (!tornadoDiv.querySelector('.plot-content')) {
+                const chartWrapper = document.createElement('div');
+                chartWrapper.className = 'plot-content';
+                chartWrapper.style.cssText = 'padding:20px; flex:1; min-height:0;';
+                // Move existing content into wrapper
+                while (tornadoDiv.firstChild) {
+                    chartWrapper.appendChild(tornadoDiv.firstChild);
+                }
+                tornadoDiv.appendChild(chartWrapper);
+            }
+            
+            // Insert selector at the top
+            tornadoDiv.insertBefore(selectorDiv, tornadoDiv.firstChild);
+            console.log('✅ NEW selector inserted into DOM');
+            console.log('Selector element:', selectorDiv);
+            console.log('Selector computed style:', window.getComputedStyle(selectorDiv));
+        } else {
+            console.log('🔄 Updating EXISTING tornado selector');
+            // Update options if selector already exists
+            const select = document.getElementById('tornado-view-select');
+            select.innerHTML = `
+                <option value="contribution">Contribution by Reservoir</option>
+                <option value="combined">Combined (All Reservoirs)</option>
+                ${reservoirResults.map(res => `<option value="res-${res.id}">${res.name} - Sensitivity</option>`).join('')}
+            `;
+            console.log('✅ Selector options updated');
+        }
+        
+        // Always re-attach event listener (removes old one if it exists)
+        const select = document.getElementById('tornado-view-select');
+        console.log('🔗 Attaching event listener to selector');
+        select.onchange = function(e) {
+            const selectedView = e.target.value;
+            console.log('Selector changed to:', selectedView);
+            renderTornadoView(selectedView, reservoirResults, unitLabel, config);
+        };
+        
+        // Render initial view (contribution chart)
+        console.log('🎨 Rendering initial contribution chart');
+        renderTornadoView('contribution', reservoirResults, unitLabel, config);
+    } else if (showIndividual) {
+        console.log('❌ Individual view - removing tornado selector');
+        // Clear tornado chart and selector in individual view
+        const tornadoDiv = document.getElementById('tornado');
+        const selectorDiv = document.getElementById('tornado-selector');
+        if (selectorDiv) selectorDiv.remove();
+        tornadoDiv.innerHTML = '<div style="padding:40px;text-align:center;color:#9CA3AF;">Contribution chart available in Aggregated view</div>';
+    } else if (!showIndividual && reservoirResults.length === 1) {
+        console.log('❌ Only 1 reservoir - removing tornado selector');
+        // Single reservoir in multi-reservoir mode - remove selector
+        const selectorDiv = document.getElementById('tornado-selector');
+        if (selectorDiv) selectorDiv.remove();
+    }
+}
+
+/* ===== Render Tornado View (Contribution or Sensitivity) ===== */
+function renderTornadoView(viewType, reservoirResults, unitLabel, config) {
+    console.log('renderTornadoView called with viewType:', viewType);
+    const tornadoDiv = document.getElementById('tornado');
+    const chartDiv = tornadoDiv.querySelector('.plot-content') || tornadoDiv;
+    
+    if (viewType === 'contribution') {
+        // Show contribution stacked bar chart
+        console.log('Rendering contribution chart');
         const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
         const percentiles = ['P90', 'P50', 'P10'];
+        
+        const quantiles = arr => {
+            const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b), n = s.length;
+            return n > 0 ? [s[Math.floor(n * 0.1)], s[Math.floor(n * 0.5)], s[Math.floor(n * 0.9)]] : [NaN, NaN, NaN];
+        };
+        
         const traces = reservoirResults.map((res, i) => {
             const [p90, p50, p10] = quantiles(res.primary);
             return {
@@ -2648,22 +2932,182 @@ function displayMultiReservoirResultsFiltered(reservoirResults, totalPrimary, to
         };
         
         Plotly.newPlot('tornado', traces, layout, config);
-    } else if (showIndividual) {
-        // Clear tornado chart in individual view
-        document.getElementById('tornado').innerHTML = '<div style="padding:40px;text-align:center;color:#9CA3AF;">Contribution chart available in Aggregated view</div>';
+    } else if (viewType === 'combined') {
+        // Show combined tornado sensitivity for all reservoirs
+        console.log('Rendering combined tornado sensitivity');
+        
+        if (lastSimulationData && lastSimulationData.combinedTornadoData) {
+            console.log('Combined tornado data:', lastSimulationData.combinedTornadoData);
+            plotTornado(lastSimulationData.combinedTornadoData, unitLabel, 'tornado');
+        } else {
+            console.log('No combined tornado data available');
+            document.getElementById('tornado').innerHTML = '<div style="padding:40px;text-align:center;color:#9CA3AF;">Combined tornado data not available</div>';
+        }
+    } else if (viewType.startsWith('res-')) {
+        // Show tornado sensitivity for specific reservoir
+        console.log('Rendering tornado sensitivity');
+        const reservoirId = parseInt(viewType.replace('res-', ''));
+        console.log('Reservoir ID:', reservoirId);
+        const reservoir = reservoirResults.find(r => r.id === reservoirId);
+        console.log('Found reservoir:', reservoir);
+        
+        if (reservoir && reservoir.tornadoData) {
+            console.log('Tornado data:', reservoir.tornadoData);
+            plotTornado(reservoir.tornadoData, unitLabel, 'tornado');
+        } else {
+            console.log('No tornado data available');
+            document.getElementById('tornado').innerHTML = '<div style="padding:40px;text-align:center;color:#9CA3AF;">Tornado data not available for this reservoir</div>';
+        }
     }
+}
+
+/* ===== Generate Combined Tornado (All Reservoirs) ===== */
+function generateCombinedTornado(reservoirConfigs, reservoirResults) {
+    // This generates a tornado chart showing sensitivity for each parameter in each reservoir
+    // Each parameter-reservoir combination gets its own bar
+    
+    // Calculate base case (deterministic mid case for all reservoirs combined)
+    let baseVolume = 0;
+    reservoirResults.forEach(res => {
+        baseVolume += res.detRecMidCase; // Use recoverable volume
+    });
+    
+    // For each parameter in each reservoir, create a separate tornado bar
+    const tornadoBars = [];
+    
+    reservoirConfigs.forEach((config, resIdx) => {
+        const result = reservoirResults[resIdx];
+        
+        config.dists.forEach(dist => {
+            const paramName = dist.name;
+            
+            // Get deterministic value and range for this parameter
+            const detValue = mostLikely(dist.type, dist.v, dist.wPerc);
+            let lowValue, highValue;
+            
+            if (dist.type === 'Normal') {
+                const [mean, stdDev] = dist.raw;
+                lowValue = mean - stdDev;
+                highValue = mean + stdDev;
+            } else if (dist.type === 'Triangular' || dist.type === 'PERT') {
+                const [min, mode, max] = dist.raw;
+                lowValue = min;
+                highValue = max;
+            } else if (dist.type === 'Uniform') {
+                const [min, max] = dist.raw;
+                lowValue = min;
+                highValue = max;
+            } else if (dist.type === 'Known') {
+                const [p90, p50, p10] = dist.wPerc;
+                lowValue = p90;
+                highValue = p10;
+            } else {
+                // Discrete or other - use ±20% of deterministic
+                lowValue = detValue * 0.8;
+                highValue = detValue * 1.2;
+            }
+            
+            // Calculate volumes with this parameter varied for this reservoir
+            const lowVol = calculateVolumeWithParam(config, paramName, lowValue);
+            const highVol = calculateVolumeWithParam(config, paramName, highValue);
+            
+            // Calculate total volumes (this reservoir varied + others at deterministic)
+            let lowTotalVolume = lowVol;
+            let highTotalVolume = highVol;
+            
+            reservoirResults.forEach((otherRes, otherIdx) => {
+                if (otherIdx !== resIdx) {
+                    lowTotalVolume += otherRes.detRecMidCase;
+                    highTotalVolume += otherRes.detRecMidCase;
+                }
+            });
+            
+            // Calculate deltas
+            const lowDelta = lowTotalVolume - baseVolume;
+            const highDelta = highTotalVolume - baseVolume;
+            
+            tornadoBars.push({
+                name: `${abbreviateParam(paramName)} (${result.name})`,
+                base: baseVolume,
+                lowDelta: lowDelta,
+                highDelta: highDelta
+            });
+        });
+    });
+    
+    // Sort by absolute impact (larger impact first)
+    tornadoBars.sort((a, b) => {
+        const impactA = Math.max(Math.abs(a.lowDelta), Math.abs(a.highDelta));
+        const impactB = Math.max(Math.abs(b.lowDelta), Math.abs(b.highDelta));
+        return impactB - impactA;
+    });
+    
+    return tornadoBars;
+}
+
+/* ===== Calculate Volume With Single Parameter Varied ===== */
+function calculateVolumeWithParam(config, paramName, paramValue) {
+    // Calculate deterministic volume with one parameter set to a specific value
+    const detParams = {};
+    
+    // Get deterministic values for all parameters
+    for (const dist of config.dists) {
+        if (dist.name === paramName) {
+            detParams[dist.name] = paramValue; // Use the varied value
+        } else {
+            detParams[dist.name] = mostLikely(dist.type, dist.v, dist.wPerc);
+        }
+    }
+    
+    // Get RF
+    const rf = detParams['Recovery Factor'] || 0.5;
+    
+    // Calculate volume based on fluid type
+    const useGRV = config.dists.some(d => d.name === 'GRV');
+    let vol = 0;
+    
+    if (config.fluid === 'oil') {
+        const geom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+        vol = (7758 * geom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bo']) / 1e6;
+    } else if (config.fluid === 'gas') {
+        const geom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+        vol = (43560 * geom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bg']) / 1e9;
+    } else if (config.fluid === 'csg') {
+        const geom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+        vol = (48013 * geom * detParams['Coal Density'] * detParams['Gas Content']) / 1e9;
+    } else if (config.fluid === 'oilgas') {
+        const geom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+        const stoiip = (7758 * geom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bo']) / 1e6;
+        const giipBOE = (7758 * geom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) * detParams['Rs'] / detParams['Bo']) / 5.8e9;
+        vol = stoiip + giipBOE;
+    } else if (config.fluid === 'gasvo') {
+        const geom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+        const giipMMBOE = (43560 * geom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bg']) / 5.8e9;
+        const voMMBO = (43560 * geom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) * detParams['Rv'] / detParams['Bg']) / 1e6;
+        vol = giipMMBOE + voMMBO;
+    }
+    
+    return vol * rf; // Return recoverable volume
 }
 
 /* ===== Multi-Reservoir Simulation ===== */
 function runMultiReservoirSimulation() {
     console.log('runMultiReservoirSimulation called');
-    const err = document.getElementById('error');
-    err.textContent = "";
+    
+    // Clear all error messages for all reservoirs
+    multiReservoirData.forEach(r => {
+        const errDiv = document.getElementById(`error-r${r.id}`);
+        if (errDiv) errDiv.textContent = "";
+    });
     
     const iters = parseInt(document.getElementById('iterations').value, 10);
     const nbins = Math.max(10, parseInt(document.getElementById('nbins').value, 10) || 100);
     if (!(iters > 0)) {
-        err.textContent = "Iterations must be a positive number.";
+        // Show error in all reservoir error divs
+        multiReservoirData.forEach(r => {
+            const errDiv = document.getElementById(`error-r${r.id}`);
+            if (errDiv) errDiv.textContent = "Iterations must be a positive number.";
+        });
         return;
     }
     
@@ -2672,7 +3116,11 @@ function runMultiReservoirSimulation() {
     // Collect enabled reservoirs
     const enabledReservoirs = multiReservoirData.filter(r => r.included);
     if (enabledReservoirs.length === 0) {
-        err.textContent = "At least one reservoir must be included in the total.";
+        // Show error in all reservoir error divs
+        multiReservoirData.forEach(r => {
+            const errDiv = document.getElementById(`error-r${r.id}`);
+            if (errDiv) errDiv.textContent = "At least one reservoir must be included in the total.";
+        });
         return;
     }
     
@@ -2684,6 +3132,7 @@ function runMultiReservoirSimulation() {
         const containerSelector = `#params-${reservoir.id}`;
         const rows = [...document.querySelectorAll(`${containerSelector} .dist-row`)];
         const dists = [];
+        const errDiv = document.getElementById(`error-r${reservoir.id}`);
         
         for (const row of rows) {
             const name = row.getAttribute('data-param');
@@ -2692,21 +3141,21 @@ function runMultiReservoirSimulation() {
             
             // Validation
             if (type === 'Triangular' && !(raw[0] <= raw[1] && raw[1] <= raw[2])) {
-                err.textContent = `[${reservoir.name}] Invalid Triangular values for ${name}.`;
+                if (errDiv) errDiv.textContent = `Invalid Triangular values for ${name}.`;
                 return;
             }
             if (type === 'PERT' && !(raw[0] <= raw[1] && raw[1] <= raw[2])) {
-                err.textContent = `[${reservoir.name}] Invalid PERT values for ${name}.`;
+                if (errDiv) errDiv.textContent = `Invalid PERT values for ${name}.`;
                 return;
             }
             if (type === 'Uniform' && !(raw[0] <= raw[2])) {
-                err.textContent = `[${reservoir.name}] Invalid Uniform values for ${name}.`;
+                if (errDiv) errDiv.textContent = `Invalid Uniform values for ${name}.`;
                 return;
             }
             if (type !== 'Discrete') {
                 for (let j = 0; j < 3; j++) {
                     if (Number.isNaN(raw[j]) && !DIST_LABELS[type][j].includes('(ignore)')) {
-                        err.textContent = `[${reservoir.name}] Please enter a valid number for ${name} (${DIST_LABELS[type][j]}).`;
+                        if (errDiv) errDiv.textContent = `Please enter a valid number for ${name} (${DIST_LABELS[type][j]}).`;
                         return;
                     }
                 }
@@ -2729,23 +3178,7 @@ function runMultiReservoirSimulation() {
         });
     }
     
-    // Recovery Factor (shared across all reservoirs for now)
-    const rfType = document.querySelector('.rf-type').value;
-    const rfRaw = [...document.querySelectorAll('.rf-v')].map(x => x.value === "" ? NaN : Number(x.value));
-    if (rfType === 'Triangular' && !(rfRaw[0] <= rfRaw[1] && rfRaw[1] <= rfRaw[2])) {
-        err.textContent = 'Invalid Triangular values for RF.';
-        return;
-    }
-    if (rfType === 'PERT' && !(rfRaw[0] <= rfRaw[1] && rfRaw[1] <= rfRaw[2])) {
-        err.textContent = 'Invalid PERT values for RF.';
-        return;
-    }
-    if (rfType === 'Uniform' && !(rfRaw[0] <= rfRaw[2])) {
-        err.textContent = 'Invalid Uniform values for RF.';
-        return;
-    }
-    let rfPerc = [NaN, NaN, NaN];
-    if (rfType === 'Discrete') rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x => Number(x.value));
+    console.log('Reservoir configs:', reservoirConfigs);
     
     // Helper function to draw a sample
     function drawOne(t, rawVals, valsConv, name, weightsPerc, fluid) {
@@ -2793,11 +3226,16 @@ function runMultiReservoirSimulation() {
         // Sample all parameters for this reservoir
         for (let i = 0; i < iters; i++) {
             const params = {};
-            for (const dist of config.dists) {
-                params[dist.name] = drawOne(dist.type, dist.raw, dist.v, dist.name, dist.wPerc, config.fluid);
-            }
+            let rf = 0.5; // Default RF
             
-            const rf = drawOne(rfType, rfRaw, convTriplet('Recovery Factor', rfRaw), 'Recovery Factor', rfPerc, config.fluid);
+            for (const dist of config.dists) {
+                const value = drawOne(dist.type, dist.raw, dist.v, dist.name, dist.wPerc, config.fluid);
+                if (dist.name === 'Recovery Factor') {
+                    rf = value;
+                } else {
+                    params[dist.name] = value;
+                }
+            }
             
             // Calculate volume based on fluid type
             let vol = 0;
@@ -2830,32 +3268,100 @@ function runMultiReservoirSimulation() {
             totalRecoverable[i] += vol * rf;
         }
         
+        // Calculate deterministic mid case for this reservoir
+        const detParams = {};
+        for (const dist of config.dists) {
+            const detValue = mostLikely(dist.type, dist.v, dist.wPerc);
+            if (dist.name === 'Recovery Factor') {
+                // Skip - we'll handle RF separately
+            } else {
+                detParams[dist.name] = detValue;
+            }
+        }
+        
+        // Get deterministic RF
+        const rfDist = config.dists.find(d => d.name === 'Recovery Factor');
+        const detRF = rfDist ? mostLikely(rfDist.type, rfDist.v, rfDist.wPerc) : 0.5;
+        
+        // Calculate deterministic volume
+        let detVol = 0;
+        if (config.fluid === 'oil') {
+            const detGeom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+            detVol = (7758 * detGeom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bo']) / 1e6;
+        } else if (config.fluid === 'gas') {
+            const detGeom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+            detVol = (43560 * detGeom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bg']) / 1e9;
+        } else if (config.fluid === 'csg') {
+            const detGeom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+            detVol = (48013 * detGeom * detParams['Coal Density'] * detParams['Gas Content']) / 1e9;
+        } else if (config.fluid === 'oilgas') {
+            const detGeom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+            const detStoiip = (7758 * detGeom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bo']) / 1e6;
+            const detGiipBOE = (7758 * detGeom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) * detParams['Rs'] / detParams['Bo']) / 5.8e9;
+            detVol = detStoiip + detGiipBOE;
+        } else if (config.fluid === 'gasvo') {
+            const detGeom = useGRV ? detParams['GRV'] : (detParams['Area'] * detParams['Thickness']);
+            const detGiipMMBOE = (43560 * detGeom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) / detParams['Bg']) / 5.8e9;
+            const detVoMMBO = (43560 * detGeom * detParams['Net to Gross'] * detParams['Porosity'] * (1 - detParams['Water Saturation']) * detParams['Rv'] / detParams['Bg']) / 1e6;
+            detVol = detGiipMMBOE + detVoMMBO;
+        }
+        
+        const detRecVol = detVol * detRF;
+        
+        // Generate tornado data for this reservoir
+        // Separate RF from other parameters
+        const nonRFParams = config.dists.filter(d => d.name !== 'Recovery Factor');
+        const rfDistForTornado = config.dists.find(d => d.name === 'Recovery Factor');
+        
+        let tornadoData = null;
+        if (rfDistForTornado) {
+            // Include RF in tornado
+            tornadoData = tornadoBars(config.dists, rfDistForTornado.type, rfDistForTornado.raw, rfDistForTornado.wPerc, config.fluid, null);
+        } else if (nonRFParams.length > 0) {
+            // No RF, just use parameters
+            tornadoData = tornadoBars(nonRFParams, 'Normal', [1, 0, NaN], [NaN, NaN, NaN], config.fluid, null);
+        }
+        
+        console.log(`Generated tornado for ${config.name}, bars:`, tornadoData ? tornadoData.length : 0);
+        
         reservoirResults.push({
             id: config.id,
             name: config.name,
             fluid: config.fluid,
             primary: primary,
-            recoverable: recoverable
+            recoverable: recoverable,
+            detMidCase: detVol,
+            detRecMidCase: detRecVol,
+            tornadoData: tornadoData
         });
     }
     
     console.log('Simulation complete. Reservoir results:', reservoirResults);
     
+    // Generate combined tornado (all reservoirs)
+    const combinedTornadoData = generateCombinedTornado(reservoirConfigs, reservoirResults);
+    console.log('Generated combined tornado, bars:', combinedTornadoData ? combinedTornadoData.length : 0);
+    
     // Display aggregated results
     displayMultiReservoirResults(reservoirResults, totalPrimary, totalRecoverable, nbins);
     
-    // Store for CSV export
+    // Store for CSV export (including combined tornado)
     lastSimulationData = {
         multiReservoir: true,
         reservoirResults: reservoirResults,
         totalPrimary: totalPrimary,
         totalRecoverable: totalRecoverable,
-        iters: iters
+        iters: iters,
+        combinedTornadoData: combinedTornadoData
     };
     
-    // Enable CSV download buttons
-    document.getElementById('downloadCsv').disabled = false;
-    document.getElementById('downloadSamples').disabled = false;
+    // Enable CSV download buttons for all reservoirs
+    multiReservoirData.forEach(reservoir => {
+        const downloadCsvBtn = document.getElementById(`downloadCsv-r${reservoir.id}`);
+        const downloadSamplesBtn = document.getElementById(`downloadSamples-r${reservoir.id}`);
+        if (downloadCsvBtn) downloadCsvBtn.disabled = false;
+        if (downloadSamplesBtn) downloadSamplesBtn.disabled = false;
+    });
 }
 
 /* ===== Simulation ===== */
@@ -3834,6 +4340,26 @@ function runSimulation() {
     }
 }
 
+// Parameter abbreviation mapping for tornado charts
+function abbreviateParam(paramName) {
+    const abbrevMap = {
+        'Area': 'A',
+        'Thickness': 'h',
+        'Net to Gross': 'NTG',
+        'Porosity': 'φ',
+        'Water Saturation': 'Sw',
+        'Bo': 'Bo',
+        'Bg': 'Bg',
+        'Recovery Factor': 'RF',
+        'GRV': 'GRV',
+        'Coal Density': 'ρc',
+        'Gas Content': 'Gc',
+        'Rs': 'Rs',
+        'Rv': 'Rv'
+    };
+    return abbrevMap[paramName] || paramName;
+}
+
 // Tornado sensitivity calculation function
 function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
     // Access helpers
@@ -3955,7 +4481,7 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
           }
         }
         bars.push({
-            name: paramNames[idx],
+            name: abbreviateParam(paramNames[idx]),
             low: lowVal,
             high: highVal,
             base: base,
@@ -3968,7 +4494,8 @@ function tornadoBars(params, rfType, rfRaw, rfPerc, fluid, metric) {
     return bars;
 }
 
-function plotTornado(bars, unit) {
+function plotTornado(bars, unit, targetDiv) {
+  const target = targetDiv || 'tornado'; // Default to 'tornado' if not specified
   const names = bars.map(b => b.name);
   const lowDeltas = bars.map(b => b.lowDelta);
   const highDeltas = bars.map(b => b.highDelta);
@@ -4035,7 +4562,7 @@ function plotTornado(bars, unit) {
           {type: 'line', x0: 0, x1: 0, y0: -0.5, y1: names.length-0.5, yref: 'y', line: {color: '#374151', width: 2}}
         ]
     };
-    Plotly.newPlot('tornado', [traceLow, traceHigh], layout, {displayModeBar: false, responsive: true});
+    Plotly.newPlot(target, [traceLow, traceHigh], layout, {displayModeBar: false, responsive: true});
 }
 
 /* ===== Synced X-axis zoom across results ===== */
@@ -4111,11 +4638,27 @@ document.querySelectorAll('.results-controls .toggle-btn').forEach(btn => {
 /* Number of Reservoirs Handler */
 document.getElementById('numReservoirs').addEventListener('change', () => {
   const numReservoirs = parseInt(document.getElementById('numReservoirs').value);
+  const globalRFSection = document.getElementById('global-rf-section');
+  const globalButtons = document.getElementById('global-buttons');
+  const globalError = document.getElementById('error');
+  const globalFormula = document.getElementById('formula-note');
+  
   if (numReservoirs > 1) {
+    // Hide global sections in multi-reservoir mode (each reservoir has its own)
+    if (globalRFSection) globalRFSection.style.display = 'none';
+    if (globalButtons) globalButtons.style.display = 'none';
+    if (globalError) globalError.style.display = 'none';
+    if (globalFormula) globalFormula.style.display = 'none';
+    
     mountReservoirSections();
-    prefillDefaults();
     setTimeout(renderDistPreviews, 50); // Small delay to ensure DOM is ready
   } else {
+    // Show global sections in single-reservoir mode
+    if (globalRFSection) globalRFSection.style.display = 'block';
+    if (globalButtons) globalButtons.style.display = 'flex';
+    if (globalError) globalError.style.display = 'block';
+    if (globalFormula) globalFormula.style.display = 'block';
+    
     // Single reservoir - use simple layout
     const container = document.getElementById('reservoirs-container');
     container.innerHTML = `
@@ -4139,7 +4682,16 @@ document.getElementById('numReservoirs').addEventListener('change', () => {
 mountGeometrySelector();
 // Initialize with single reservoir by default
 const initialNumReservoirs = parseInt(document.getElementById('numReservoirs').value);
+const globalRFSection = document.getElementById('global-rf-section');
+const globalButtons = document.getElementById('global-buttons');
+const globalError = document.getElementById('error');
+
 if (initialNumReservoirs > 1) {
+  // Hide global sections for multi-reservoir mode
+  if (globalRFSection) globalRFSection.style.display = 'none';
+  if (globalButtons) globalButtons.style.display = 'none';
+  if (globalError) globalError.style.display = 'none';
+  
   mountReservoirSections();
   prefillDefaults();
 } else {
