@@ -1127,12 +1127,22 @@ function generateSummaryCSV() {
 }
 
 function generateSamplesCSV() {
-  if (!lastSimulationData) return;
+  if (!lastSimulationData) {
+    console.error('No simulation data available for CSV export');
+    return;
+  }
   
-  const {samplesData, labelSet, fluid} = lastSimulationData;
-  
-  // Build header
-  let headers = [];
+  try {
+    const {samplesData, labelSet, fluid} = lastSimulationData;
+    
+    if (!samplesData || samplesData.length === 0) {
+      console.error('No samples data available');
+      alert('No simulation data available. Please run a simulation first.');
+      return;
+    }
+    
+    // Build header
+    let headers = [];
   let rows = [];
   
   // Determine which parameters to include based on geometry mode and fluid type
@@ -1160,23 +1170,31 @@ function generateSamplesCSV() {
   
   headers.push('Recovery Factor (frac)');
   
-  // Add calculated fields
+  // Add calculated volume fields
   if (fluid === 'csg') {
-    // For CSG: Coal Mass instead of HCPV
-    if (geomMode === 'grv') {
-      headers.push('Coal Mass (tons)');
-    } else {
-      headers.push('GRV (acre-ft)', 'Coal Mass (tons)');
+    // For CSG: Coal Mass instead of rock volumes
+    if (geomMode !== 'grv') {
+      headers.push('GRV (acre-ft)');
     }
+    headers.push('Coal Mass (tons)');
   } else {
-    if (geomMode === 'grv') {
-      headers.push('HCPV (acre-ft)');
-    } else {
-      headers.push('GRV (acre-ft)', 'HCPV (acre-ft)');
+    // For oil/gas: show all rock volumes
+    if (geomMode !== 'grv') {
+      headers.push('GRV (acre-ft)');
     }
+    headers.push('NRV (acre-ft)', 'PV (acre-ft)', 'HCPV (acre-ft)');
   }
   
-  headers.push(`In-Place (${labelSet.unit})`, `Recoverable (${labelSet.unit})`);
+  // Add in-place and recoverable volumes
+  if (fluid === 'oilgas') {
+    headers.push('STOIIP (oil) (MMBO)', 'GIIP (solution gas) (Bscf)', 'Total In-Place (MMBOE)');
+  } else if (fluid === 'gasvo') {
+    headers.push('GIIP (gas) (Bscf)', 'STOIIP (vaporized oil) (MMBO)', 'Total In-Place (MMBOE)');
+  } else {
+    headers.push(`In-Place (${labelSet.unit})`);
+  }
+  
+  headers.push(`Recoverable (${labelSet.unit})`);
   
   // Build rows
   const n = samplesData.length;
@@ -1213,23 +1231,52 @@ function generateSamplesCSV() {
     
     values.push(row.RF.toFixed(4));
     
-    // Calculated fields
+    // Get GRV for calculations
+    const grv = row.GRV;
+    
+    // Calculated volume fields
     if (fluid === 'csg') {
-      // For CSG: show Coal Mass instead of HCPV
-      if (geomMode === 'grv') {
-        values.push(row.CoalMass.toFixed(2));
-      } else {
-        values.push(row.GRV.toFixed(2), row.CoalMass.toFixed(2));
+      // For CSG: show Coal Mass instead of rock volumes
+      if (geomMode !== 'grv') {
+        values.push(grv.toFixed(2));
       }
+      values.push(row.CoalMass.toFixed(2));
     } else {
-      if (geomMode === 'grv') {
-        values.push(row.HCPV.toFixed(2));
-      } else {
-        values.push(row.GRV.toFixed(2), row.HCPV.toFixed(2));
+      // For oil/gas: calculate and show all rock volumes
+      const nrv = grv * row.NTG;
+      const pv = nrv * row.PHI;
+      const hcpv = pv * (1 - row.SW);
+      
+      if (geomMode !== 'grv') {
+        values.push(grv.toFixed(2));
       }
+      values.push(nrv.toFixed(2), pv.toFixed(2), hcpv.toFixed(2));
     }
     
-    values.push(row.primary.toFixed(2), row.recoverable.toFixed(2));
+    // In-place and recoverable volumes
+    if (fluid === 'oilgas') {
+      // Calculate STOIIP (oil) and GIIP (solution gas) separately
+      // STOIIP = 7758 × GRV × NTG × φ × (1-Sw) / Bo / 1e6 (MMBO)
+      const stoiip = (7758 * grv * row.NTG * row.PHI * (1 - row.SW) / row.FVF) / 1e6;
+      // GIIP = 7758 × GRV × NTG × φ × (1-Sw) × Rs / Bo / 1e9 (Bscf)
+      const giip = (7758 * grv * row.NTG * row.PHI * (1 - row.SW) * row.Rs / row.FVF) / 1e9;
+      // Total in BOE = STOIIP + GIIP/5.8
+      const totalBOE = stoiip + giip / 5.8;
+      values.push(stoiip.toFixed(2), giip.toFixed(2), totalBOE.toFixed(2));
+    } else if (fluid === 'gasvo') {
+      // Calculate GIIP (gas) and STOIIP (vaporized oil) separately
+      // GIIP = 43560 × GRV × NTG × φ × (1-Sw) / Bg / 1e9 (Bscf)
+      const giip = (43560 * grv * row.NTG * row.PHI * (1 - row.SW) / row.FVF) / 1e9;
+      // STOIIP (VO) = 43560 × GRV × NTG × φ × (1-Sw) × Rv / Bg / 1e6 (MMBO)
+      const stoiip = (43560 * grv * row.NTG * row.PHI * (1 - row.SW) * row.Rv / row.FVF) / 1e6;
+      // Total in BOE = GIIP/5.8 + STOIIP
+      const totalBOE = giip / 5.8 + stoiip;
+      values.push(giip.toFixed(2), stoiip.toFixed(2), totalBOE.toFixed(2));
+    } else {
+      values.push(row.primary.toFixed(2));
+    }
+    
+    values.push(row.recoverable.toFixed(2));
     
     rows.push(values.join(','));
   }
@@ -1238,6 +1285,11 @@ function generateSamplesCSV() {
   csv += rows.join('\n');
   
   downloadCSV('rangerover_samples.csv', csv);
+  
+  } catch (error) {
+    console.error('Error generating samples CSV:', error);
+    alert('Error generating CSV: ' + error.message);
+  }
 }
 
 /* ===== Simulation ===== */
