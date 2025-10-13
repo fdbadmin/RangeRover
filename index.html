@@ -938,10 +938,20 @@ entries.forEach((d,idx)=>{
 
   const isPercent = isFrac(d.name);
   const xLabel = xLabelFor(d.name);
+  
+  // Get physical bounds for this parameter
+  const fluid = document.getElementById('fluid').value;
+  const bounds = boundsFor(d.name, fluid);
 
   const X = [];
   const Y = [];
-  function pushXY(x,y){ if(Number.isFinite(x) && Number.isFinite(y)){ X.push(x); Y.push(y); } }
+  function pushXY(x,y){ 
+    // Only add points within physical bounds
+    if(Number.isFinite(x) && Number.isFinite(y) && x >= bounds.min && x <= bounds.max){ 
+      X.push(x); 
+      Y.push(y); 
+    } 
+  }
 
   function normalPDF(x,mu,sigma){
     const z=(x-mu)/sigma;
@@ -985,22 +995,26 @@ function betaPDF01(x,a,b){
   if(d.type==='Normal'){
     const mu = d.rawVals[0];
     const sigma = Math.abs(d.rawVals[1]) || 1e-6;
+    // Build full distribution, will be truncated by pushXY
     addCurve(mu-4*sigma, mu+4*sigma, normalPDF, [mu, sigma]);
     trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
   }else if(d.type==='Triangular'){
     const a = d.rawVals[0], c = d.rawVals[1], b = d.rawVals[2];
     const aa = Math.min(a,b), bb = Math.max(a,b);
     const cc = Math.max(aa, Math.min(c, bb));
+    // Build full distribution with original parameters, will be truncated by pushXY
     addCurve(aa, bb, (x,aaa,ccc,bbb)=>triangularPDF(x,aaa,ccc,bbb), [aa, cc, bb]);
     trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
   }else if(d.type==='Uniform'){
     const a = d.rawVals[0], b = d.rawVals[2];
     const aa = Math.min(a,b), bb = Math.max(a,b);
+    // Build full distribution with original parameters, will be truncated by pushXY
     addCurve(aa, bb, (x,aaa,bbb)=>uniformPDF(x,aaa,bbb), [aa, bb]);
     trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
   }else if(d.type==='Known Distribution'){
     const {mean,sigma} = normalFromP90P50P10(d.rawVals[0], d.rawVals[1], d.rawVals[2]);
     const s = Math.abs(sigma)||1e-6;
+    // Build full distribution, will be truncated by pushXY
     addCurve(mean-4*s, mean+4*s, normalPDF, [mean, s]);
     trace = {x:X, y:Y, mode:'lines', type:'scatter', fill:'tozeroy', line:{width:1.5}};
 
@@ -1011,6 +1025,7 @@ function betaPDF01(x,a,b){
       const alpha = 1 + lambda*(m-a)/(b-a);
       const beta  = 1 + lambda*(b-m)/(b-a);
       const npts = 300;
+      // Build full distribution with original parameters, will be truncated by pushXY
       for(let i=0;i<npts;i++){
         const x = a + (b-a)*i/(npts-1);
         const y = betaPDF01((x-a)/(b-a), alpha, beta) / (b-a);
@@ -1024,13 +1039,23 @@ function betaPDF01(x,a,b){
   }else if(d.type==='Discrete'){
     const {vals, weights} = discreteValsAndWeights(d.rawVals, d.wPerc);
     if(vals.length>0){
-      let s = weights.reduce((a,b)=>a+b,0);
-      const ws = (s>0)? weights.map(w=>w/s) : weights.map(_=>1/weights.length);
-      trace = {
-        x: vals, y: ws,
-        type:'bar',
-        marker:{line:{width:0.6}, opacity:0.9}
-      };
+      // Filter values to only those within physical bounds
+      const validIndices = vals.map((v, i) => ({v, w: weights[i], i}))
+                               .filter(item => item.v >= bounds.min && item.v <= bounds.max);
+      const filteredVals = validIndices.map(item => item.v);
+      const filteredWeights = validIndices.map(item => item.w);
+      
+      if(filteredVals.length > 0){
+        let s = filteredWeights.reduce((a,b)=>a+b,0);
+        const ws = (s>0)? filteredWeights.map(w=>w/s) : filteredWeights.map(_=>1/filteredWeights.length);
+        trace = {
+          x: filteredVals, y: ws,
+          type:'bar',
+          marker:{line:{width:0.6}, opacity:0.9}
+        };
+      }else{
+        trace = {x:[], y:[], type:'bar'};
+      }
     }else{
       trace = {x:[], y:[], type:'bar'};
     }
