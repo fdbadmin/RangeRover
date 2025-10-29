@@ -329,6 +329,28 @@
   .reservoir-content.active{
     display:block;
   }
+  
+  .res-fluid-selector{
+    margin-bottom:16px;
+    padding:12px;
+    background:#F9FAFB;
+    border:1px solid var(--border);
+    border-radius:8px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .res-fluid-selector label{
+    margin:0;
+    font-weight:600;
+  }
+  .res-fluid{
+    flex:1;
+    padding:8px 12px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-size:14px;
+  }
 
   /* Correlation Matrix UI */
   .correlation-section{
@@ -481,6 +503,16 @@
       <!-- Reservoir Parameter Containers -->
       <div id="reservoirContainers">
         <div class="reservoir-content active" data-res-id="0">
+          <div class="res-fluid-selector">
+            <label><strong>Fluid:</strong></label>
+            <select class="res-fluid" data-res-id="0" id="res0-fluid">
+              <option value="oil">Oil</option>
+              <option value="gas">Gas</option>
+              <option value="csg">Coal Seam Gas</option>
+              <option value="oilgas">Oil + Solution Gas</option>
+              <option value="gasvo">Gas + Vaporized Oil</option>
+            </select>
+          </div>
           <div class="params-container" data-res-id="0"></div>
         </div>
       </div>
@@ -1042,7 +1074,7 @@ const DIST_LABELS = {
 
 /* ===== Multi-Reservoir Management ===== */
 let reservoirs = [
-  { id: 0, name: 'Reservoir 1', params: {} }  // params will store distribution settings
+  { id: 0, name: 'Reservoir 1', fluidType: 'oil', params: {} }  // params will store distribution settings
 ];
 let activeReservoirId = 0;
 
@@ -1079,6 +1111,12 @@ function saveCurrentReservoirParams() {
   
   const container = document.querySelector(`.reservoir-content[data-res-id="${activeReservoirId}"]`);
   if(!container) return;
+  
+  // Save fluid type
+  const fluidSel = container.querySelector('.res-fluid');
+  if(fluidSel) {
+    res.fluidType = fluidSel.value;
+  }
   
   const rows = [...container.querySelectorAll(`.dist-row`)];
   res.params = {};
@@ -1121,13 +1159,26 @@ function saveCurrentReservoirParams() {
 
 function loadReservoirParams(resId) {
   const res = reservoirs.find(r => r.id === resId);
-  if(!res || !res.params || Object.keys(res.params).length === 0) {
-    // No saved params, keep defaults or clear
-    return;
-  }
+  if(!res) return;
   
   const container = document.querySelector(`.reservoir-content[data-res-id="${resId}"]`);
   if(!container) return;
+  
+  // Restore fluid type
+  const fluidSel = container.querySelector('.res-fluid');
+  if(fluidSel && res.fluidType) {
+    if(fluidSel.value !== res.fluidType) {
+      fluidSel.value = res.fluidType;
+      // Remount params if fluid type changed
+      remountReservoirParams(resId);
+      return; // remountReservoirParams will load params
+    }
+  }
+  
+  if(!res.params || Object.keys(res.params).length === 0) {
+    // No saved params, keep defaults or clear
+    return;
+  }
   
   const rows = [...container.querySelectorAll(`.dist-row`)];
   rows.forEach(row => {
@@ -1183,6 +1234,7 @@ function addReservoir() {
   const newRes = {
     id: newId,
     name: `Reservoir ${newId + 1}`,
+    fluidType: 'oil',
     params: {}
   };
   reservoirs.push(newRes);
@@ -1190,13 +1242,35 @@ function addReservoir() {
   // Update tabs UI
   renderReservoirTabs();
   
-  // Create new content container with unique params div
+  // Create new content container with fluid selector and params div
   const container = document.getElementById('reservoirContainers');
   const newContent = document.createElement('div');
   newContent.className = 'reservoir-content';
   newContent.dataset.resId = newId;
-  newContent.innerHTML = `<div class="params-container" data-res-id="${newId}"></div>`;
+  newContent.innerHTML = `
+    <div class="res-fluid-selector">
+      <label><strong>Fluid:</strong></label>
+      <select class="res-fluid" data-res-id="${newId}">
+        <option value="oil">Oil</option>
+        <option value="gas">Gas</option>
+        <option value="csg">Coal Seam Gas</option>
+        <option value="oilgas">Oil + Solution Gas</option>
+        <option value="gasvo">Gas + Vaporized Oil</option>
+      </select>
+    </div>
+    <div class="params-container" data-res-id="${newId}"></div>
+  `;
   container.appendChild(newContent);
+  
+  // Wire up fluid selector for this reservoir
+  const fluidSel = newContent.querySelector('.res-fluid');
+  fluidSel.addEventListener('change', () => {
+    const res = reservoirs.find(r => r.id === newId);
+    if(res) {
+      res.fluidType = fluidSel.value;
+      remountReservoirParams(newId);
+    }
+  });
   
   // Mount params for new reservoir
   mountParamsForReservoir(newId);
@@ -1371,15 +1445,24 @@ function addWeightsRow(afterEl, idPrefix){
 }
 
 function mountParamsForReservoir(resId) {
-  console.log('mountParamsForReservoir called with resId:', resId, 'PARAMS:', PARAMS);
+  const res = reservoirs.find(r => r.id === resId);
+  if(!res) {
+    console.error('No reservoir found with id:', resId);
+    return;
+  }
+  
   const host = document.querySelector(`.params-container[data-res-id="${resId}"]`);
   if(!host) {
     console.error('No params container found for reservoir', resId);
     return;
   }
   
+  // Get params based on this reservoir's fluid type
+  const fluidType = res.fluidType || 'oil';
+  const params = paramsFor(fluidType);
+  
   host.innerHTML = '';
-  PARAMS.forEach(p => {
+  params.forEach(p => {
     const unit = p.name==="Bo" ? "(RB/STB)" 
       : p.name==="Bg" ? "(scf/SCF)" 
       : p.name==="Rs" ? "(scf/bbl)" 
@@ -1451,6 +1534,13 @@ function mountParamsForReservoir(resId) {
     weights.querySelectorAll('input').forEach(w=>w.addEventListener('input', renderDistPreviewsDebounced));
     refresh();
   });
+}
+
+function remountReservoirParams(resId) {
+  // Remount params when fluid type changes
+  mountParamsForReservoir(resId);
+  prefillDefaults(resId);
+  renderDistPreviewsDebounced();
 }
 
 function mountParams(){
@@ -3316,6 +3406,15 @@ document.getElementById('downloadSamples').addEventListener('click', generateSam
 /* Bootstrap */
 mountGeometrySelector();
 mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
+
+// Wire up fluid selector for reservoir 0
+document.getElementById('res0-fluid').addEventListener('change', (e) => {
+  const res = reservoirs.find(r => r.id === 0);
+  if(res) {
+    res.fluidType = e.target.value;
+    remountReservoirParams(0);
+  }
+});
 
 // Initialize multi-reservoir UI
 renderReservoirTabs();
