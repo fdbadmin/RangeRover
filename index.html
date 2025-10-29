@@ -268,6 +268,24 @@
     transition:all 0.2s;
     position:relative;
     top:2px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .res-tab input.res-name-input{
+    border:none;
+    background:transparent;
+    font-size:14px;
+    font-weight:600;
+    color:inherit;
+    padding:0;
+    width:120px;
+    outline:none;
+  }
+  .res-tab input.res-name-input:focus{
+    background:#fff;
+    padding:2px 4px;
+    border-radius:4px;
   }
   .res-tab:hover{
     color:var(--text);
@@ -463,7 +481,7 @@
       <!-- Reservoir Parameter Containers -->
       <div id="reservoirContainers">
         <div class="reservoir-content active" data-res-id="0">
-          <div id="params"></div>
+          <div class="params-container" data-res-id="0"></div>
         </div>
       </div>
 
@@ -1059,7 +1077,10 @@ function saveCurrentReservoirParams() {
   const res = reservoirs.find(r => r.id === activeReservoirId);
   if(!res) return;
   
-  const rows = [...document.querySelectorAll(`#params .dist-row`)];
+  const container = document.querySelector(`.reservoir-content[data-res-id="${activeReservoirId}"]`);
+  if(!container) return;
+  
+  const rows = [...container.querySelectorAll(`.dist-row`)];
   res.params = {};
   
   rows.forEach(row => {
@@ -1105,7 +1126,10 @@ function loadReservoirParams(resId) {
     return;
   }
   
-  const rows = [...document.querySelectorAll(`#params .dist-row`)];
+  const container = document.querySelector(`.reservoir-content[data-res-id="${resId}"]`);
+  if(!container) return;
+  
+  const rows = [...container.querySelectorAll(`.dist-row`)];
   rows.forEach(row => {
     const name = row.getAttribute('data-param');
     const saved = res.params[name];
@@ -1166,13 +1190,16 @@ function addReservoir() {
   // Update tabs UI
   renderReservoirTabs();
   
-  // Create new content container
+  // Create new content container with unique params div
   const container = document.getElementById('reservoirContainers');
   const newContent = document.createElement('div');
   newContent.className = 'reservoir-content';
   newContent.dataset.resId = newId;
-  newContent.innerHTML = `<div id="params-${newId}"></div>`;
+  newContent.innerHTML = `<div class="params-container" data-res-id="${newId}"></div>`;
   container.appendChild(newContent);
+  
+  // Mount params for new reservoir
+  mountParamsForReservoir(newId);
   
   // Enable correlation section if 2+ reservoirs
   if(reservoirs.length >= 2) {
@@ -1227,7 +1254,18 @@ function renderReservoirTabs() {
     tab.className = 'res-tab';
     if(res.id === activeReservoirId) tab.classList.add('active');
     tab.dataset.resId = res.id;
-    tab.innerHTML = `${res.name}`;
+    
+    // Editable name input
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'res-name-input';
+    nameInput.value = res.name;
+    nameInput.onclick = (e) => e.stopPropagation(); // Don't switch tab when clicking input
+    nameInput.onchange = (e) => {
+      res.name = e.target.value || `Reservoir ${res.id + 1}`;
+      updateCorrelationMatrix(); // Update headers
+    };
+    tab.appendChild(nameInput);
     
     if(reservoirs.length > 1) {
       const removeBtn = document.createElement('span');
@@ -1328,10 +1366,92 @@ function addWeightsRow(afterEl, idPrefix){
   afterEl.insertAdjacentElement('afterend', div);
   return div;
 }
+
+function mountParamsForReservoir(resId) {
+  const host = document.querySelector(`.params-container[data-res-id="${resId}"]`);
+  if(!host) {
+    console.error('No params container found for reservoir', resId);
+    return;
+  }
+  
+  host.innerHTML = '';
+  PARAMS.forEach(p => {
+    const unit = p.name==="Bo" ? "(RB/STB)" 
+      : p.name==="Bg" ? "(scf/SCF)" 
+      : p.name==="Rs" ? "(scf/bbl)" 
+      : p.name==="Rv" ? "(bbl/scf)" 
+      : p.name==="Coal Density" ? "(g/cm³)" 
+      : p.name==="Gas Content" ? "(m³/ton)" 
+      : isFrac(p.name) ? "(fraction)" 
+      : "";
+    const row = document.createElement('div');
+    row.className = 'dist-row';
+    row.setAttribute('data-param', p.name);
+    row.innerHTML = `
+      <label>${p.name} ${unit}</label>
+      <div class="field">
+        <div class="slabel">Distribution</div>
+        <select class="dist-type">
+          <option>Discrete</option><option>Triangular</option><option>Uniform</option>
+          <option>PERT</option>
+          <option selected>Normal</option><option>Known Distribution</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="slabel l0">${DIST_LABELS['Normal'][0]}</div>
+        <input class="v v0" type="number" step="any">
+      </div>
+      <div class="field">
+        <div class="slabel l1">${DIST_LABELS['Normal'][1]}</div>
+        <input class="v v1" type="number" step="any">
+      </div>
+      <div class="field">
+        <div class="slabel l2">${DIST_LABELS['Normal'][2]}</div>
+        <input class="v v2" type="number" step="any">
+      </div>`;
+    host.appendChild(row);
+    const weights = addWeightsRow(row, `res${resId}_${p.name.replace(/\s+/g,'_')}`);
+    const sel = row.querySelector('.dist-type');
+    const inputs = [...row.querySelectorAll('input.v')];
+    const labs = [row.querySelector('.l0'),row.querySelector('.l1'),row.querySelector('.l2')];
+    function refresh(){
+      const L=DIST_LABELS[sel.value];
+      labs.forEach((lab,i)=>{
+        lab.textContent = L[i];
+        const ignore = L[i].includes('(ignore)');
+        lab.classList.toggle('disabled', ignore);
+        const fieldDiv = labs[i].closest('.field');
+        if(ignore){
+          inputs[i].disabled = true;
+          inputs[i].value = '';
+          fieldDiv && fieldDiv.classList.add('hidden-field');
+        }else{
+          inputs[i].disabled = false;
+          fieldDiv && fieldDiv.classList.remove('hidden-field');
+        }
+      });
+      const rowEl = sel.closest('.dist-row');
+      if(sel.value==='Discrete'){
+        weights.classList.remove('hidden');
+        weights.classList.add('show-sep');
+        rowEl && rowEl.classList.add('with-weights');
+      }else{
+        weights.classList.add('hidden');
+        weights.classList.remove('show-sep');
+        rowEl && rowEl.classList.remove('with-weights');
+      }
+      renderDistPreviewsDebounced();
+    }
+    sel.addEventListener('change', refresh);
+    inputs.forEach(inp => inp.addEventListener('input', renderDistPreviewsDebounced));
+    weights.querySelectorAll('input').forEach(w=>w.addEventListener('input', renderDistPreviewsDebounced));
+    refresh();
+  });
+}
+
 function mountParams(){
-  console.log('mountParams called. PARAMS:', PARAMS);
-  const host=document.getElementById('params');
-  console.log('params container:', host);
+  // Mount params for first reservoir (id=0)
+  mountParamsForReservoir(0);
   host.innerHTML='';
   PARAMS.forEach(p=>{
     const unit = p.name==="Bo" ? "(RB/STB)" 
