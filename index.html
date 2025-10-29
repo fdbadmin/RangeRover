@@ -2178,11 +2178,433 @@ function generateSamplesCSV() {
   }
 }
 
+/* ===== Multi-Reservoir Simulation ===== */
+function runMultiReservoirSimulation() {
+  const err = document.getElementById('error');
+  const iters = parseInt(document.getElementById('iterations').value, 10);
+  const nbins = Math.max(10, parseInt(document.getElementById('nbins').value, 10) || 100);
+  if (!(iters > 0)) {
+    err.textContent = "Iterations must be a positive number.";
+    return;
+  }
+  
+  const rnd = seeded((document.getElementById('seed').value || "").trim());
+  const correlationEnabled = document.getElementById('enableCorrelation').checked;
+  
+  console.log(`Multi-reservoir simulation: ${reservoirs.length} reservoirs, correlation: ${correlationEnabled}`);
+  
+  // Gather distribution data for each reservoir
+  const reservoirData = [];
+  for(const res of reservoirs) {
+    const container = document.querySelector(`.reservoir-content[data-res-id="${res.id}"] .params-container`);
+    if(!container) {
+      err.textContent = `Cannot find container for ${res.name}`;
+      return;
+    }
+    
+    const rows = [...container.querySelectorAll('.dist-row')];
+    const dists = [];
+    
+    for (const row of rows) {
+      const name = row.getAttribute('data-param');
+      const type = row.querySelector('.dist-type').value;
+      const raw = [...row.querySelectorAll('input.v')].map(el => el.value === "" ? NaN : Number(el.value));
+      
+      // Validation
+      if (type === 'Triangular' && !(raw[0] <= raw[1] && raw[1] <= raw[2])) {
+        err.textContent = `[${res.name}] Invalid Triangular values for ${name}.`;
+        return;
+      }
+      if (type === 'PERT' && !(raw[0] <= raw[1] && raw[1] <= raw[2])) {
+        err.textContent = `[${res.name}] Invalid PERT values for ${name}.`;
+        return;
+      }
+      if (type === 'Uniform' && !(raw[0] <= raw[2])) {
+        err.textContent = `[${res.name}] Invalid Uniform values for ${name}.`;
+        return;
+      }
+      if (type !== 'Discrete') {
+        for (let j = 0; j < 3; j++) {
+          if (Number.isNaN(raw[j]) && !DIST_LABELS[type][j].includes('(ignore)')) {
+            err.textContent = `[${res.name}] Please enter a valid number for ${name} (${DIST_LABELS[type][j]}).`;
+            return;
+          }
+        }
+      }
+      
+      const conv = convTriplet(name, raw);
+      let wPerc = [NaN, NaN, NaN];
+      const wrow = row.nextElementSibling;
+      if (type === 'Discrete' && wrow && wrow.classList.contains('weights-row')) {
+        wPerc = [...wrow.querySelectorAll('input')].map(x => Number(x.value));
+      }
+      dists.push({name, type, raw, v: conv, wPerc});
+    }
+    
+    reservoirData.push({
+      id: res.id,
+      name: res.name,
+      fluidType: res.fluidType || 'oil',
+      dists
+    });
+  }
+  
+  // Recovery Factor (shared across all reservoirs)
+  const rfType = document.querySelector('.rf-type').value;
+  const rfRaw = [...document.querySelectorAll('.rf-v')].map(x => x.value === "" ? NaN : Number(x.value));
+  if (rfType === 'Triangular' && !(rfRaw[0] <= rfRaw[1] && rfRaw[1] <= rfRaw[2])) {
+    err.textContent = 'Invalid Triangular values for RF.';
+    return;
+  }
+  if (rfType === 'PERT' && !(rfRaw[0] <= rfRaw[1] && rfRaw[1] <= rfRaw[2])) {
+    err.textContent = 'Invalid PERT values for RF.';
+    return;
+  }
+  if (rfType === 'Uniform' && !(rfRaw[0] <= rfRaw[2])) {
+    err.textContent = 'Invalid Uniform values for RF.';
+    return;
+  }
+  if (rfType !== 'Discrete') {
+    for (let j = 0; j < 3; j++) {
+      if (Number.isNaN(rfRaw[j]) && !DIST_LABELS[rfType][j].includes('(ignore)')) {
+        err.textContent = `Please enter a valid number for RF (${DIST_LABELS[rfType][j]}).`;
+        return;
+      }
+    }
+  }
+  let rfPerc = [NaN, NaN, NaN];
+  if (rfType === 'Discrete') {
+    rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x => Number(x.value));
+  }
+  
+  // Build correlation matrix if enabled
+  let correlations = null;
+  if (correlationEnabled && reservoirs.length > 1) {
+    correlations = readCorrelationMatrix();
+  }
+  
+  // Run Monte Carlo simulation
+  const n = iters;
+  const reservoirVolumes = []; // Array of {name, primary, rec} for each reservoir
+  
+  for(const resData of reservoirData) {
+    reservoirVolumes.push({
+      id: resData.id,
+      name: resData.name,
+      primary: new Float64Array(n),
+      rec: new Float64Array(n)
+    });
+  }
+  
+  const totalPrimary = new Float64Array(n);
+  const totalRec = new Float64Array(n);
+  
+  // Sample parameters and calculate volumes
+  for (let iter = 0; iter < n; iter++) {
+    // Sample RF once per iteration (shared)
+    const rf = sampleDist(rfType, rfRaw, rfPerc, rnd, boundsFor('Recovery Factor', 'oil'));
+    
+    // Sample parameters for each reservoir
+    const sampledParams = {};
+    
+    if (correlationEnabled && correlations) {
+      // Correlated sampling using Gaussian copula
+      sampledParams = sampleCorrelatedParameters(reservoirData, correlations, rnd);
+    } else {
+      // Independent sampling
+      for(const resData of reservoirData) {
+        sampledParams[resData.id] = {};
+        for(const dist of resData.dists) {
+          const bounds = boundsFor(dist.name, resData.fluidType);
+          sampledParams[resData.id][dist.name] = sampleDist(dist.type, dist.v, dist.wPerc, rnd, bounds);
+        }
+      }
+    }
+    
+    // Calculate volumes for each reservoir
+    for(let r = 0; r < reservoirData.length; r++) {
+      const resData = reservoirData[r];
+      const params = sampledParams[resData.id];
+      const vol = calculateReservoirVolume(resData.fluidType, params, geometryMode());
+      
+      reservoirVolumes[r].primary[iter] = vol;
+      reservoirVolumes[r].rec[iter] = vol * rf;
+      
+      totalPrimary[iter] += vol;
+      totalRec[iter] += vol * rf;
+    }
+  }
+  
+  // Calculate statistics
+  const sortedPrimary = Array.from(totalPrimary).sort((a, b) => a - b);
+  const sortedRec = Array.from(totalRec).sort((a, b) => a - b);
+  
+  const P90 = sortedPrimary[Math.floor(n * 0.1)];
+  const P50 = sortedPrimary[Math.floor(n * 0.5)];
+  const P10 = sortedPrimary[Math.floor(n * 0.9)];
+  
+  const RP90 = sortedRec[Math.floor(n * 0.1)];
+  const RP50 = sortedRec[Math.floor(n * 0.5)];
+  const RP10 = sortedRec[Math.floor(n * 0.9)];
+  
+  // Display results
+  displayMultiReservoirResults({
+    reservoirs: reservoirVolumes,
+    totalPrimary,
+    totalRec,
+    P90, P50, P10,
+    RP90, RP50, RP10,
+    nbins
+  });
+}
+
+function readCorrelationMatrix() {
+  // Read correlation values from the UI
+  const correlations = {};
+  const inputs = document.querySelectorAll('#corrGrid input[type="number"]');
+  inputs.forEach(inp => {
+    const param = inp.dataset.param;
+    const res1 = parseInt(inp.dataset.res1);
+    const res2 = parseInt(inp.dataset.res2);
+    const value = parseFloat(inp.value) || 0;
+    
+    if(!correlations[param]) {
+      correlations[param] = {};
+    }
+    if(!correlations[param][res1]) {
+      correlations[param][res1] = {};
+    }
+    correlations[param][res1][res2] = value;
+  });
+  return correlations;
+}
+
+function sampleCorrelatedParameters(reservoirData, correlations, rnd) {
+  // Implement Gaussian copula sampling with correlations
+  const result = {};
+  const nRes = reservoirData.length;
+  
+  // For each parameter type, sample correlated values
+  const paramNames = ['Area', 'Thickness', 'GRV', 'Net to Gross', 'Porosity', 'Water Saturation', 'Bo', 'Bg', 'Rs', 'Rv', 'Coal Density', 'Gas Content'];
+  
+  for(const paramName of paramNames) {
+    // Check if this parameter exists in any reservoir
+    const reservoirsWithParam = reservoirData.filter(rd => rd.dists.some(d => d.name === paramName));
+    if(reservoirsWithParam.length === 0) continue;
+    
+    // Build correlation matrix for this parameter
+    const R = [];
+    for(let i = 0; i < nRes; i++) {
+      R[i] = [];
+      for(let j = 0; j < nRes; j++) {
+        if(i === j) {
+          R[i][j] = 1.0;
+        } else {
+          const corr = correlations[paramName]?.[i]?.[j] || 0;
+          R[i][j] = corr;
+        }
+      }
+    }
+    
+    // Sample correlated standard normals
+    const z = [];
+    for(let i = 0; i < nRes; i++) {
+      z[i] = rnd.normal();
+    }
+    
+    // Apply Cholesky if correlation is non-trivial
+    const hasCorr = R.some((row, i) => row.some((val, j) => i !== j && Math.abs(val) > 0.01));
+    let correlatedZ = z;
+    
+    if(hasCorr) {
+      try {
+        const L = cholesky(R);
+        correlatedZ = matrixVectorMultiply(L, z);
+      } catch(e) {
+        console.warn(`Cholesky failed for ${paramName}, using independent samples:`, e);
+        correlatedZ = z;
+      }
+    }
+    
+    // Transform to uniform then to target distributions
+    for(let r = 0; r < nRes; r++) {
+      const resData = reservoirData[r];
+      const dist = resData.dists.find(d => d.name === paramName);
+      
+      if(!result[resData.id]) result[resData.id] = {};
+      
+      if(dist) {
+        const u = normalCDF(correlatedZ[r]);
+        const bounds = boundsFor(paramName, resData.fluidType);
+        result[resData.id][paramName] = inverseCDF(u, dist.type, dist.v, dist.wPerc, bounds);
+      }
+    }
+  }
+  
+  return result;
+}
+
+function calculateReservoirVolume(fluidType, params, geomMode) {
+  // Calculate in-place volume based on fluid type and parameters
+  let AH;
+  if(geomMode === 'grv') {
+    AH = params['GRV'] || 0;
+  } else {
+    AH = (params['Area'] || 0) * (params['Thickness'] || 0);
+  }
+  
+  const NTG = params['Net to Gross'] || 0;
+  const PHI = params['Porosity'] || 0;
+  const SW = params['Water Saturation'] || 0;
+  
+  if(fluidType === 'oil') {
+    const Bo = params['Bo'] || 1.0;
+    return (7758 * AH * NTG * PHI * (1 - SW) / Bo) / 1e6; // MMBO
+  } else if(fluidType === 'gas') {
+    const Bg = params['Bg'] || 0.005;
+    return (43560 * AH * NTG * PHI * (1 - SW) / Bg) / 1e9; // BCF
+  } else if(fluidType === 'csg') {
+    const coalDens = params['Coal Density'] || 1.4;
+    const gasContent = params['Gas Content'] || 10;
+    return (48013 * AH * coalDens * gasContent) / 1e9; // BCF
+  } else if(fluidType === 'oilgas') {
+    const Bo = params['Bo'] || 1.0;
+    const Rs = params['Rs'] || 0;
+    const stoiip = (7758 * AH * NTG * PHI * (1 - SW) / Bo) / 1e6; // MMBO
+    const giip = (7758 * AH * NTG * PHI * (1 - SW) * Rs / Bo) / 1e9; // BCF
+    return stoiip + giip / 5.8; // MMBOE
+  } else if(fluidType === 'gasvo') {
+    const Bg = params['Bg'] || 0.005;
+    const Rv = params['Rv'] || 0;
+    const giip = (43560 * AH * NTG * PHI * (1 - SW) / Bg) / 1e9; // BCF
+    const vo = (43560 * AH * NTG * PHI * (1 - SW) * Rv / Bg) / 1e6; // MMBO
+    return giip / 5.8 + vo; // MMBOE
+  }
+  
+  return 0;
+}
+
+function displayMultiReservoirResults(data) {
+  const {reservoirs, totalPrimary, totalRec, P90, P50, P10, RP90, RP50, RP10, nbins} = data;
+  
+  // Update summary table with portfolio totals
+  const fmt = x => x.toFixed(2);
+  document.querySelector('.s-p90').textContent = fmt(P90);
+  document.querySelector('.s-p50').textContent = fmt(P50);
+  document.querySelector('.s-p10').textContent = fmt(P10);
+  document.querySelector('.s-mid').textContent = '—'; // TODO: deterministic for multi-res
+  
+  document.querySelector('.r-p90').textContent = fmt(RP90);
+  document.querySelector('.r-p50').textContent = fmt(RP50);
+  document.querySelector('.r-p10').textContent = fmt(RP10);
+  document.querySelector('.r-mid').textContent = '—';
+  
+  // Update metric names
+  document.getElementById('metric-name').textContent = 'Total Portfolio (MMBOE)';
+  document.getElementById('metric-name-rec').textContent = 'Total Recoverable (MMBOE)';
+  document.getElementById('results-title').innerHTML = 'Results (Portfolio) <span class="chip">P90 / P50 / P10</span>';
+  
+  // Plot portfolio CDFs and histograms
+  const cdf = arr => {
+    const s = Array.from(arr).sort((a, b) => a - b);
+    const y = s.map((_, i) => (i + 1) / s.length);
+    return {x: s, y};
+  };
+  
+  const cMain = cdf(totalPrimary);
+  const cRec = cdf(totalRec);
+  
+  const config = {displayModeBar: false, responsive: true};
+  const baseLayout = (title, xlabel, ylabel) => ({
+    title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'},
+    xaxis: {title: xlabel, gridcolor: '#EFEFEF', color: '#374151'},
+    yaxis: {title: ylabel, gridcolor: '#EFEFEF', color: '#374151'},
+    margin: {t: 60, l: 70, r: 40, b: 70},
+    paper_bgcolor: '#fff',
+    plot_bgcolor: '#fff'
+  });
+  
+  // Portfolio CDF
+  Plotly.newPlot('cdf-main', [
+    {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+    {
+      x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+      marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+      text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
+      textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+    }
+  ], baseLayout('Portfolio In-Place CDF', 'Volume (MMBOE)', 'Cumulative Probability'), config);
+  
+  // Portfolio Histogram
+  const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
+  const trace = {x: Array.from(totalPrimary), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
+  Plotly.newPlot('hist-main', [trace], baseLayout('Portfolio In-Place Histogram', 'Volume (MMBOE)', 'Frequency'), config)
+    .then(gd => Plotly.relayout(gd, {shapes: vLines([P90, P50, P10])}));
+  
+  // Recoverable CDF
+  Plotly.newPlot('cdf-rec', [
+    {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+    {
+      x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+      marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+      text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
+      textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+    }
+  ], baseLayout('Portfolio Recoverable CDF', 'Volume (MMBOE)', 'Cumulative Probability'), config);
+  
+  // Recoverable Histogram
+  const recTrace = {x: Array.from(totalRec), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
+  Plotly.newPlot('hist-rec', [recTrace], baseLayout('Portfolio Recoverable Histogram', 'Volume (MMBOE)', 'Frequency'), config)
+    .then(gd => Plotly.relayout(gd, {shapes: vLines([RP90, RP50, RP10])}));
+  
+  // Tornado chart: Show reservoir contributions
+  displayReservoirContributions(reservoirs, P50);
+}
+
+function displayReservoirContributions(reservoirs, totalP50) {
+  // Instead of tornado chart, show stacked bar of reservoir contributions
+  const names = reservoirs.map(r => r.name);
+  const p50s = reservoirs.map(r => {
+    const sorted = Array.from(r.primary).sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length * 0.5)];
+  });
+  const percents = p50s.map(p => (p / totalP50 * 100).toFixed(1));
+  
+  const trace = {
+    x: names,
+    y: p50s,
+    type: 'bar',
+    marker: {color: ['#ED1C24', '#FCCC0A', '#0095DA'].slice(0, names.length)},
+    text: percents.map(p => `${p}%`),
+    textposition: 'auto',
+    hovertemplate: '%{x}<br>P50: %{y:.2f} MMBOE<br>%{text} of total<extra></extra>'
+  };
+  
+  const layout = {
+    title: {text: 'Reservoir Contributions (P50)', font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'},
+    xaxis: {title: 'Reservoir', color: '#374151'},
+    yaxis: {title: 'Volume (MMBOE)', gridcolor: '#EFEFEF', color: '#374151'},
+    margin: {t: 60, l: 70, r: 40, b: 70},
+    paper_bgcolor: '#fff',
+    plot_bgcolor: '#fff',
+    showlegend: false
+  };
+  
+  Plotly.newPlot('tornado', [trace], layout, {displayModeBar: false, responsive: true});
+}
+
 /* ===== Simulation ===== */
 function runSimulation() {
     console.log('runSimulation called');
     const err = document.getElementById('error');
     err.textContent = "";
+    
+    // Check if multi-reservoir mode
+    if(reservoirs.length > 1) {
+      return runMultiReservoirSimulation();
+    }
+    
+    // Single reservoir mode (original logic)
     const iters = parseInt(document.getElementById('iterations').value, 10);
     const nbins = Math.max(10, parseInt(document.getElementById('nbins').value, 10) || 100);
     if (!(iters > 0)) {
