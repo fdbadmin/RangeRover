@@ -595,6 +595,16 @@
     <div class="card">
       <h3 class="section-title" id="results-title">Results (MMBO) <span class="chip">P90 / P50 / P10</span></h3>
 
+      <!-- Multi-reservoir results view selector -->
+      <div id="resultsViewSelector" style="display:none; margin-bottom:16px; padding:12px; background:#F9FAFB; border-radius:8px;">
+        <label style="font-weight:600; margin-right:12px;">View:</label>
+        <select id="resultsView" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px;">
+          <option value="total">Portfolio Total</option>
+          <option value="overlay">All Reservoirs (Overlay)</option>
+          <!-- Individual reservoirs will be added dynamically -->
+        </select>
+      </div>
+
       <div class="summary-wrap">
         <table id="summary">
           <thead><tr><th>Metric</th><th>P90</th><th>P50</th><th>P10</th><th>Deterministic Mid Case</th></tr></thead>
@@ -2518,33 +2528,59 @@ function calculateReservoirVolume(fluidType, params, geomMode) {
 function displayMultiReservoirResults(data) {
   const {reservoirs, totalPrimary, totalRec, P90, P50, P10, RP90, RP50, RP10, nbins} = data;
   
-  // Update summary table with portfolio totals
-  const fmt = x => x.toFixed(2);
-  document.querySelector('.s-p90').textContent = fmt(P90);
-  document.querySelector('.s-p50').textContent = fmt(P50);
-  document.querySelector('.s-p10').textContent = fmt(P10);
-  document.querySelector('.s-mid').textContent = '—'; // TODO: deterministic for multi-res
-  
-  document.querySelector('.r-p90').textContent = fmt(RP90);
-  document.querySelector('.r-p50').textContent = fmt(RP50);
-  document.querySelector('.r-p10').textContent = fmt(RP10);
-  document.querySelector('.r-mid').textContent = '—';
-  
-  // Update metric names
-  document.getElementById('metric-name').textContent = 'Total Portfolio (MMBOE)';
-  document.getElementById('metric-name-rec').textContent = 'Total Recoverable (MMBOE)';
-  document.getElementById('results-title').innerHTML = 'Results (Portfolio) <span class="chip">P90 / P50 / P10</span>';
-  
-  // Plot portfolio CDFs and histograms
-  const cdf = arr => {
-    const s = Array.from(arr).sort((a, b) => a - b);
-    const y = s.map((_, i) => (i + 1) / s.length);
-    return {x: s, y};
+  // Store results globally for view switching
+  window.multiResResults = {
+    reservoirs,
+    totalPrimary,
+    totalRec,
+    P90, P50, P10,
+    RP90, RP50, RP10,
+    nbins
   };
   
-  const cMain = cdf(totalPrimary);
-  const cRec = cdf(totalRec);
+  // Show and populate view selector
+  const selector = document.getElementById('resultsViewSelector');
+  const viewSelect = document.getElementById('resultsView');
+  selector.style.display = 'block';
   
+  // Clear and rebuild options
+  viewSelect.innerHTML = `
+    <option value="total">Portfolio Total</option>
+    <option value="overlay">All Reservoirs (Overlay)</option>
+  `;
+  
+  // Add individual reservoir options
+  reservoirs.forEach(res => {
+    const opt = document.createElement('option');
+    opt.value = `res-${res.id}`;
+    opt.textContent = res.name;
+    viewSelect.appendChild(opt);
+  });
+  
+  // Check if we should add fluid type grouping option
+  const fluidTypes = [...new Set(reservoirs.map(r => window.reservoirs.find(wr => wr.id === r.id)?.fluidType || 'oil'))];
+  if(fluidTypes.length > 1) {
+    const opt = document.createElement('option');
+    opt.value = 'byfluid';
+    opt.textContent = 'By Fluid Type';
+    viewSelect.appendChild(opt);
+  }
+  
+  // Wire up view selector
+  viewSelect.onchange = () => updateMultiResView(viewSelect.value);
+  
+  // Show default view (total)
+  updateMultiResView('total');
+  
+  // Always show contributions chart
+  displayReservoirContributions(reservoirs, P50);
+}
+
+function updateMultiResView(viewType) {
+  const data = window.multiResResults;
+  if(!data) return;
+  
+  const fmt = x => x.toFixed(2);
   const config = {displayModeBar: false, responsive: true};
   const baseLayout = (title, xlabel, ylabel) => ({
     title: {text: title, font: {size: 19, color: '#111827'}, x: 0.02, xanchor: 'left'},
@@ -2555,41 +2591,235 @@ function displayMultiReservoirResults(data) {
     plot_bgcolor: '#fff'
   });
   
-  // Portfolio CDF
-  Plotly.newPlot('cdf-main', [
-    {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-    {
-      x: [P90, P50, P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
-      marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
-      text: [`P90=${fmt(P90)}`, `P50=${fmt(P50)}`, `P10=${fmt(P10)}`],
-      textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
-    }
-  ], baseLayout('Portfolio In-Place CDF', 'Volume (MMBOE)', 'Cumulative Probability'), config);
+  const cdf = arr => {
+    const s = Array.from(arr).sort((a, b) => a - b);
+    const y = s.map((_, i) => (i + 1) / s.length);
+    return {x: s, y};
+  };
   
-  // Portfolio Histogram
   const vLines = xs => xs.map(x => ({type: 'line', x0: x, x1: x, y0: 0, y1: 1, yref: 'paper', line: {dash: 'dot', width: 3, color: '#ED1C24'}}));
-  const trace = {x: Array.from(totalPrimary), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
-  Plotly.newPlot('hist-main', [trace], baseLayout('Portfolio In-Place Histogram', 'Volume (MMBOE)', 'Frequency'), config)
-    .then(gd => Plotly.relayout(gd, {shapes: vLines([P90, P50, P10])}));
   
-  // Recoverable CDF
-  Plotly.newPlot('cdf-rec', [
-    {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
-    {
-      x: [RP90, RP50, RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
-      marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
-      text: [`P90=${fmt(RP90)}`, `P50=${fmt(RP50)}`, `P10=${fmt(RP10)}`],
-      textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
-    }
-  ], baseLayout('Portfolio Recoverable CDF', 'Volume (MMBOE)', 'Cumulative Probability'), config);
+  const colors = ['#ED1C24', '#FCCC0A', '#0095DA']; // Shell colors
   
-  // Recoverable Histogram
-  const recTrace = {x: Array.from(totalRec), type: 'histogram', nbinsx: nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}};
-  Plotly.newPlot('hist-rec', [recTrace], baseLayout('Portfolio Recoverable Histogram', 'Volume (MMBOE)', 'Frequency'), config)
-    .then(gd => Plotly.relayout(gd, {shapes: vLines([RP90, RP50, RP10])}));
-  
-  // Tornado chart: Show reservoir contributions
-  displayReservoirContributions(reservoirs, P50);
+  if(viewType === 'total') {
+    // Portfolio Total View
+    document.getElementById('metric-name').textContent = 'Total Portfolio (MMBOE)';
+    document.getElementById('metric-name-rec').textContent = 'Total Recoverable (MMBOE)';
+    
+    document.querySelector('.s-p90').textContent = fmt(data.P90);
+    document.querySelector('.s-p50').textContent = fmt(data.P50);
+    document.querySelector('.s-p10').textContent = fmt(data.P10);
+    document.querySelector('.s-mid').textContent = '—';
+    
+    document.querySelector('.r-p90').textContent = fmt(data.RP90);
+    document.querySelector('.r-p50').textContent = fmt(data.RP50);
+    document.querySelector('.r-p10').textContent = fmt(data.RP10);
+    document.querySelector('.r-mid').textContent = '—';
+    
+    const cMain = cdf(data.totalPrimary);
+    const cRec = cdf(data.totalRec);
+    
+    // Portfolio CDF
+    Plotly.newPlot('cdf-main', [
+      {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      {
+        x: [data.P90, data.P50, data.P10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+        marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+        text: [`P90=${fmt(data.P90)}`, `P50=${fmt(data.P50)}`, `P10=${fmt(data.P10)}`],
+        textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+      }
+    ], baseLayout('Portfolio In-Place CDF', 'Volume (MMBOE)', 'Cumulative Probability'), config);
+    
+    // Portfolio Histogram
+    Plotly.newPlot('hist-main', [
+      {x: Array.from(data.totalPrimary), type: 'histogram', nbinsx: data.nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}}
+    ], baseLayout('Portfolio In-Place Histogram', 'Volume (MMBOE)', 'Frequency'), config)
+      .then(gd => Plotly.relayout(gd, {shapes: vLines([data.P90, data.P50, data.P10])}));
+    
+    // Recoverable CDF
+    Plotly.newPlot('cdf-rec', [
+      {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: 'var(--blue)'}},
+      {
+        x: [data.RP90, data.RP50, data.RP10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+        marker: {size: 10, color: '#ED1C24', symbol: 'circle'},
+        text: [`P90=${fmt(data.RP90)}`, `P50=${fmt(data.RP50)}`, `P10=${fmt(data.RP10)}`],
+        textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+      }
+    ], baseLayout('Portfolio Recoverable CDF', 'Volume (MMBOE)', 'Cumulative Probability'), config);
+    
+    // Recoverable Histogram
+    Plotly.newPlot('hist-rec', [
+      {x: Array.from(data.totalRec), type: 'histogram', nbinsx: data.nbins, marker: {color: 'var(--blue-light)', line: {width: 0.8, color: 'var(--blue-stroke)'}}}
+    ], baseLayout('Portfolio Recoverable Histogram', 'Volume (MMBOE)', 'Frequency'), config)
+      .then(gd => Plotly.relayout(gd, {shapes: vLines([data.RP90, data.RP50, data.RP10])}));
+    
+  } else if(viewType === 'overlay') {
+    // Overlay All Reservoirs View
+    document.getElementById('metric-name').textContent = 'Portfolio Total (MMBOE)';
+    document.getElementById('metric-name-rec').textContent = 'Total Recoverable (MMBOE)';
+    
+    document.querySelector('.s-p90').textContent = fmt(data.P90);
+    document.querySelector('.s-p50').textContent = fmt(data.P50);
+    document.querySelector('.s-p10').textContent = fmt(data.P10);
+    document.querySelector('.s-mid').textContent = '—';
+    
+    document.querySelector('.r-p90').textContent = fmt(data.RP90);
+    document.querySelector('.r-p50').textContent = fmt(data.RP50);
+    document.querySelector('.r-p10').textContent = fmt(data.RP10);
+    document.querySelector('.r-mid').textContent = '—';
+    
+    // Create traces for each reservoir + total
+    const cdfTraces = [];
+    const recCdfTraces = [];
+    
+    // Individual reservoirs
+    data.reservoirs.forEach((res, idx) => {
+      const cMain = cdf(res.primary);
+      const cRec = cdf(res.rec);
+      
+      cdfTraces.push({
+        x: cMain.x, y: cMain.y, mode: 'lines',
+        line: {width: 2, color: colors[idx % colors.length], dash: 'dash'},
+        name: res.name,
+        hovertemplate: `${res.name}<br>%{x:.2f} MMBOE<extra></extra>`
+      });
+      
+      recCdfTraces.push({
+        x: cRec.x, y: cRec.y, mode: 'lines',
+        line: {width: 2, color: colors[idx % colors.length], dash: 'dash'},
+        name: res.name,
+        hovertemplate: `${res.name}<br>%{x:.2f} MMBOE<extra></extra>`
+      });
+    });
+    
+    // Portfolio total (solid line)
+    const cTotal = cdf(data.totalPrimary);
+    const cTotalRec = cdf(data.totalRec);
+    
+    cdfTraces.push({
+      x: cTotal.x, y: cTotal.y, mode: 'lines',
+      line: {width: 3, color: '#111827'},
+      name: 'Portfolio Total',
+      hovertemplate: 'Total<br>%{x:.2f} MMBOE<extra></extra>'
+    });
+    
+    recCdfTraces.push({
+      x: cTotalRec.x, y: cTotalRec.y, mode: 'lines',
+      line: {width: 3, color: '#111827'},
+      name: 'Portfolio Total',
+      hovertemplate: 'Total<br>%{x:.2f} MMBOE<extra></extra>'
+    });
+    
+    const overlayLayout = (title) => ({
+      ...baseLayout(title, 'Volume (MMBOE)', 'Cumulative Probability'),
+      showlegend: true,
+      legend: {x: 0.7, y: 0.95, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#CCC', borderwidth: 1}
+    });
+    
+    Plotly.newPlot('cdf-main', cdfTraces, overlayLayout('In-Place Volume CDFs (All Reservoirs)'), config);
+    Plotly.newPlot('cdf-rec', recCdfTraces, overlayLayout('Recoverable Volume CDFs (All Reservoirs)'), config);
+    
+    // Histograms: Stack individual reservoirs
+    const histTraces = data.reservoirs.map((res, idx) => ({
+      x: Array.from(res.primary),
+      type: 'histogram',
+      nbinsx: data.nbins,
+      name: res.name,
+      marker: {color: colors[idx % colors.length], opacity: 0.6},
+      hovertemplate: `${res.name}<br>%{x:.2f} MMBOE<extra></extra>`
+    }));
+    
+    const recHistTraces = data.reservoirs.map((res, idx) => ({
+      x: Array.from(res.rec),
+      type: 'histogram',
+      nbinsx: data.nbins,
+      name: res.name,
+      marker: {color: colors[idx % colors.length], opacity: 0.6},
+      hovertemplate: `${res.name}<br>%{x:.2f} MMBOE<extra></extra>`
+    }));
+    
+    const histLayout = (title) => ({
+      ...baseLayout(title, 'Volume (MMBOE)', 'Frequency'),
+      barmode: 'overlay',
+      showlegend: true,
+      legend: {x: 0.7, y: 0.95, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#CCC', borderwidth: 1}
+    });
+    
+    Plotly.newPlot('hist-main', histTraces, histLayout('In-Place Volume Histograms (All Reservoirs)'), config);
+    Plotly.newPlot('hist-rec', recHistTraces, histLayout('Recoverable Volume Histograms (All Reservoirs)'), config);
+    
+  } else if(viewType.startsWith('res-')) {
+    // Individual Reservoir View
+    const resId = parseInt(viewType.substring(4));
+    const res = data.reservoirs.find(r => r.id === resId);
+    if(!res) return;
+    
+    // Calculate stats for this reservoir
+    const sortedPrimary = Array.from(res.primary).sort((a, b) => a - b);
+    const sortedRec = Array.from(res.rec).sort((a, b) => a - b);
+    const n = sortedPrimary.length;
+    
+    const p90 = sortedPrimary[Math.floor(n * 0.1)];
+    const p50 = sortedPrimary[Math.floor(n * 0.5)];
+    const p10 = sortedPrimary[Math.floor(n * 0.9)];
+    
+    const rp90 = sortedRec[Math.floor(n * 0.1)];
+    const rp50 = sortedRec[Math.floor(n * 0.5)];
+    const rp10 = sortedRec[Math.floor(n * 0.9)];
+    
+    document.getElementById('metric-name').textContent = `${res.name} In-Place (MMBOE)`;
+    document.getElementById('metric-name-rec').textContent = `${res.name} Recoverable (MMBOE)`;
+    
+    document.querySelector('.s-p90').textContent = fmt(p90);
+    document.querySelector('.s-p50').textContent = fmt(p50);
+    document.querySelector('.s-p10').textContent = fmt(p10);
+    document.querySelector('.s-mid').textContent = '—';
+    
+    document.querySelector('.r-p90').textContent = fmt(rp90);
+    document.querySelector('.r-p50').textContent = fmt(rp50);
+    document.querySelector('.r-p10').textContent = fmt(rp10);
+    document.querySelector('.r-mid').textContent = '—';
+    
+    const cMain = cdf(res.primary);
+    const cRec = cdf(res.rec);
+    
+    const resIdx = data.reservoirs.findIndex(r => r.id === resId);
+    const resColor = colors[resIdx % colors.length];
+    
+    // In-Place CDF
+    Plotly.newPlot('cdf-main', [
+      {x: cMain.x, y: cMain.y, mode: 'lines', line: {width: 3, color: resColor}},
+      {
+        x: [p90, p50, p10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+        marker: {size: 10, color: '#111827', symbol: 'circle'},
+        text: [`P90=${fmt(p90)}`, `P50=${fmt(p50)}`, `P10=${fmt(p10)}`],
+        textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+      }
+    ], baseLayout(`${res.name} In-Place CDF`, 'Volume (MMBOE)', 'Cumulative Probability'), config);
+    
+    // In-Place Histogram
+    Plotly.newPlot('hist-main', [
+      {x: Array.from(res.primary), type: 'histogram', nbinsx: data.nbins, marker: {color: resColor, opacity: 0.7, line: {width: 0.8, color: '#fff'}}}
+    ], baseLayout(`${res.name} In-Place Histogram`, 'Volume (MMBOE)', 'Frequency'), config)
+      .then(gd => Plotly.relayout(gd, {shapes: vLines([p90, p50, p10])}));
+    
+    // Recoverable CDF
+    Plotly.newPlot('cdf-rec', [
+      {x: cRec.x, y: cRec.y, mode: 'lines', line: {width: 3, color: resColor}},
+      {
+        x: [rp90, rp50, rp10], y: [0.1, 0.5, 0.9], mode: 'markers+text',
+        marker: {size: 10, color: '#111827', symbol: 'circle'},
+        text: [`P90=${fmt(rp90)}`, `P50=${fmt(rp50)}`, `P10=${fmt(rp10)}`],
+        textposition: ['right center', 'left center', 'right center'], textfont: {size: 12}, hoverinfo: 'skip'
+      }
+    ], baseLayout(`${res.name} Recoverable CDF`, 'Volume (MMBOE)', 'Cumulative Probability'), config);
+    
+    // Recoverable Histogram
+    Plotly.newPlot('hist-rec', [
+      {x: Array.from(res.rec), type: 'histogram', nbinsx: data.nbins, marker: {color: resColor, opacity: 0.7, line: {width: 0.8, color: '#fff'}}}
+    ], baseLayout(`${res.name} Recoverable Histogram`, 'Volume (MMBOE)', 'Frequency'), config)
+      .then(gd => Plotly.relayout(gd, {shapes: vLines([rp90, rp50, rp10])}));
+  }
 }
 
 function displayReservoirContributions(reservoirs, totalP50) {
