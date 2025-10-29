@@ -246,6 +246,161 @@
     min-height: 462px;       /* 5% taller than 440px */
   }
 
+  /* Multi-Reservoir Tabs */
+  .reservoir-tabs{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    border-bottom:2px solid var(--border);
+    margin-bottom:16px;
+    flex-wrap:wrap;
+  }
+  .res-tab{
+    appearance:none;
+    border:none;
+    background:transparent;
+    padding:10px 16px;
+    cursor:pointer;
+    font-size:14px;
+    font-weight:600;
+    color:var(--muted);
+    border-bottom:3px solid transparent;
+    transition:all 0.2s;
+    position:relative;
+    top:2px;
+  }
+  .res-tab:hover{
+    color:var(--text);
+    background:#f9fafb;
+  }
+  .res-tab.active{
+    color:var(--shell-red);
+    border-bottom-color:var(--shell-red);
+  }
+  .res-tab .remove-res{
+    margin-left:8px;
+    color:var(--muted);
+    font-size:16px;
+    opacity:0.6;
+    transition:opacity 0.2s;
+  }
+  .res-tab .remove-res:hover{
+    opacity:1;
+    color:#B91C1C;
+  }
+  .add-res-btn{
+    appearance:none;
+    border:1px dashed var(--border);
+    background:transparent;
+    padding:8px 14px;
+    cursor:pointer;
+    font-size:13px;
+    color:var(--muted);
+    border-radius:6px;
+    transition:all 0.2s;
+    margin-left:8px;
+  }
+  .add-res-btn:hover{
+    border-color:var(--shell-red);
+    color:var(--shell-red);
+    background:#FFF8F8;
+  }
+  .reservoir-content{
+    display:none;
+  }
+  .reservoir-content.active{
+    display:block;
+  }
+
+  /* Correlation Matrix UI */
+  .correlation-section{
+    margin-top:20px;
+    padding:16px;
+    background:#F9FAFB;
+    border:1px solid var(--border);
+    border-radius:12px;
+  }
+  .correlation-section.disabled{
+    opacity:0.5;
+    pointer-events:none;
+  }
+  .corr-toggle{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .corr-toggle input[type="checkbox"]{
+    width:18px;
+    height:18px;
+    cursor:pointer;
+  }
+  .corr-toggle label{
+    cursor:pointer;
+    font-weight:600;
+    font-size:14px;
+  }
+  .corr-grid{
+    display:grid;
+    grid-template-columns:180px repeat(3, 1fr);
+    gap:8px 12px;
+    align-items:center;
+    margin-top:12px;
+  }
+  @media (max-width:900px){
+    .corr-grid{
+      grid-template-columns:1fr;
+      gap:12px;
+    }
+  }
+  .corr-grid .header{
+    font-weight:600;
+    font-size:12px;
+    color:var(--muted);
+    text-align:center;
+  }
+  .corr-grid .param-label{
+    font-weight:500;
+    font-size:13px;
+  }
+  .corr-grid input[type="number"]{
+    padding:6px 8px;
+    font-size:13px;
+  }
+  .corr-presets{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:12px;
+  }
+  .corr-presets button{
+    padding:6px 12px;
+    font-size:12px;
+  }
+  .corr-info{
+    margin-top:12px;
+    padding:8px 12px;
+    background:#FFF8CC;
+    border:1px solid #FDE68A;
+    border-radius:8px;
+    font-size:12px;
+    color:#92400E;
+  }
+
+  /* Multi-Reservoir Results */
+  .multi-res-summary{
+    margin-top:16px;
+  }
+  .res-contributions{
+    margin-top:12px;
+  }
+  .res-contributions table{
+    font-size:13px;
+  }
+  .res-contributions th{
+    background:#F9FAFB;
+  }
+
 </style>
 </head>
 <body>
@@ -298,7 +453,41 @@
 
       <hr class="sep"/>
       <h4 class="subsection">Rock &amp; fluid properties</h4>
-      <div id="params"></div>
+      
+      <!-- Multi-Reservoir Tabs -->
+      <div class="reservoir-tabs" id="reservoirTabs">
+        <button class="res-tab active" data-res-id="0">Reservoir 1</button>
+        <button class="add-res-btn" id="addReservoirBtn">+ Add Reservoir</button>
+      </div>
+
+      <!-- Reservoir Parameter Containers -->
+      <div id="reservoirContainers">
+        <div class="reservoir-content active" data-res-id="0">
+          <div id="params"></div>
+        </div>
+      </div>
+
+      <!-- Correlation Settings -->
+      <div class="correlation-section disabled" id="correlationSection">
+        <div class="corr-toggle">
+          <input type="checkbox" id="enableCorrelation">
+          <label for="enableCorrelation">Enable correlation between reservoirs</label>
+        </div>
+        <div id="correlationMatrix" style="display:none">
+          <div class="corr-grid" id="corrGrid">
+            <!-- Dynamically populated -->
+          </div>
+          <div class="corr-presets">
+            <button data-preset="independent">Independent (0.0)</button>
+            <button data-preset="weak">Weak (0.3)</button>
+            <button data-preset="moderate">Moderate (0.6)</button>
+            <button data-preset="strong">Strong (0.8)</button>
+          </div>
+          <div class="corr-info">
+            ℹ️ Correlations must be between -1 and 1. Matrix must be positive semi-definite.
+          </div>
+        </div>
+      </div>
 
       <div style="margin-top:6px">
         <h4 class="section-title">Recovery Factor <span class="chip">fraction</span></h4>
@@ -623,6 +812,200 @@ function sampleNormalTrunc(r, mean, std, min, max){
   return Math.max(min, Math.min(max, mean));
 }
 
+/* ===== Multi-Reservoir & Correlation Math ===== */
+
+// Cholesky decomposition: R = L·L^T for positive semi-definite matrix R
+function cholesky(matrix) {
+  const n = matrix.length;
+  const L = Array(n).fill(0).map(() => Array(n).fill(0));
+  
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = 0;
+      for (let k = 0; k < j; k++) {
+        sum += L[i][k] * L[j][k];
+      }
+      if (i === j) {
+        const diag = matrix[i][i] - sum;
+        if(diag <= 0) throw new Error(`Matrix not positive definite at diagonal ${i}`);
+        L[i][j] = Math.sqrt(diag);
+      } else {
+        if(Math.abs(L[j][j]) < 1e-10) throw new Error(`Near-zero diagonal at ${j}`);
+        L[i][j] = (matrix[i][j] - sum) / L[j][j];
+      }
+    }
+  }
+  return L;
+}
+
+// Matrix-vector multiplication: result = M × v
+function matrixVectorMultiply(M, v) {
+  const result = Array(M.length).fill(0);
+  for (let i = 0; i < M.length; i++) {
+    for (let j = 0; j < v.length; j++) {
+      result[i] += M[i][j] * v[j];
+    }
+  }
+  return result;
+}
+
+// Validate correlation matrix
+function validateCorrelationMatrix(R) {
+  const n = R.length;
+  if(n === 0) return {valid: true};
+  
+  // Check square
+  for(let i = 0; i < n; i++) {
+    if(R[i].length !== n) return {valid: false, error: "Matrix not square"};
+  }
+  
+  // Check symmetry and bounds
+  for (let i = 0; i < n; i++) {
+    // Diagonal must be 1
+    if(Math.abs(R[i][i] - 1.0) > 1e-6) {
+      return {valid: false, error: `Diagonal[${i}] must be 1.0, got ${R[i][i]}`};
+    }
+    for (let j = i+1; j < n; j++) {
+      // Symmetry
+      if (Math.abs(R[i][j] - R[j][i]) > 1e-6) {
+        return {valid: false, error: `Matrix not symmetric at (${i},${j})`};
+      }
+      // Bounds [-1, 1]
+      if (R[i][j] < -1 || R[i][j] > 1) {
+        return {valid: false, error: `Correlation (${i},${j}) = ${R[i][j]} out of bounds [-1,1]`};
+      }
+    }
+  }
+  
+  // Check positive semi-definite by attempting Cholesky
+  try {
+    cholesky(R);
+    return {valid: true};
+  } catch(e) {
+    return {valid: false, error: `Matrix not positive semi-definite: ${e.message}`};
+  }
+}
+
+// Standard normal CDF (approximation)
+function normalCDF(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp(-x * x / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return x >= 0 ? 1 - p : p;
+}
+
+// Standard normal inverse CDF (approximation)
+function normalInvCDF(p) {
+  if(p <= 0) return -Infinity;
+  if(p >= 1) return Infinity;
+  
+  const a = [2.50662823884, -18.61500062529, 41.39119773534, -25.44106049637];
+  const b = [-8.47351093090, 23.08336743743, -21.06224101826, 3.13082909833];
+  const c = [0.3374754822726147, 0.9761690190917186, 0.1607979714918209,
+             0.0276438810333863, 0.0038405729373609, 0.0003951896511919,
+             0.0000321767881768, 0.0000002888167364, 0.0000003960315187];
+  
+  const q = p - 0.5;
+  
+  if(Math.abs(q) <= 0.425) {
+    const r = 0.180625 - q * q;
+    let num = 0, den = 1;
+    for(let i = 0; i < 4; i++) { num = num * r + a[i]; den = den * r + b[i]; }
+    return q * num / den;
+  }
+  
+  const r = Math.sqrt(-Math.log(q < 0 ? p : 1 - p));
+  let num = c[0];
+  for(let i = 1; i < c.length; i++) { num = num * r + c[i]; }
+  return (q < 0 ? -1 : 1) * (r - num);
+}
+
+// Inverse CDF for distributions (for copula sampling)
+function inverseCDF(u, type, params) {
+  if(type === 'Normal') {
+    // params = [mean, std]
+    const z = normalInvCDF(u);
+    return params[0] + params[1] * z;
+  }
+  if(type === 'Uniform') {
+    // params = [min, max]
+    return params[0] + u * (params[2] - params[0]);
+  }
+  if(type === 'Triangular') {
+    // params = [min, mode, max]
+    const [a, c, b] = params;
+    const fc = (c - a) / (b - a);
+    if(u < fc) {
+      return a + Math.sqrt(u * (b - a) * (c - a));
+    } else {
+      return b - Math.sqrt((1 - u) * (b - a) * (b - c));
+    }
+  }
+  if(type === 'PERT') {
+    // params = [min, mode, max], use Beta with lambda=4
+    const [a, m, b] = params;
+    const lambda = 4;
+    const alpha = 1 + lambda * (m - a) / (b - a);
+    const beta = 1 + lambda * (b - m) / (b - a);
+    // Approximate Beta inverse CDF (simple version, could be improved)
+    const betaInv = betaInverseCDF(u, alpha, beta);
+    return a + betaInv * (b - a);
+  }
+  // Default: return median or mean
+  return params[1] || params[0] || 0;
+}
+
+// Simple Beta inverse CDF approximation (for PERT)
+function betaInverseCDF(p, alpha, beta) {
+  // Newton-Raphson on Beta CDF (simplified)
+  let x = 0.5; // initial guess
+  for(let iter = 0; iter < 20; iter++) {
+    const f = betaCDF(x, alpha, beta) - p;
+    const df = betaPDF(x, alpha, beta);
+    if(Math.abs(f) < 1e-6 || Math.abs(df) < 1e-10) break;
+    x = x - f / df;
+    x = Math.max(0.001, Math.min(0.999, x)); // keep in bounds
+  }
+  return x;
+}
+
+// Beta CDF (incomplete beta function - simplified)
+function betaCDF(x, alpha, beta) {
+  // Use regularized incomplete beta function I_x(a,b)
+  // Simplified approximation
+  if(x <= 0) return 0;
+  if(x >= 1) return 1;
+  // Use continued fraction or series (for simplicity, use numerical integration)
+  const steps = 100;
+  let sum = 0;
+  for(let i = 0; i < steps; i++) {
+    const t = i / steps;
+    if(t >= x) break;
+    sum += betaPDF(t, alpha, beta) / steps;
+  }
+  return sum;
+}
+
+// Beta PDF
+function betaPDF(x, alpha, beta) {
+  if(x <= 0 || x >= 1) return 0;
+  const logB = logGamma(alpha) + logGamma(beta) - logGamma(alpha + beta);
+  return Math.exp((alpha - 1) * Math.log(x) + (beta - 1) * Math.log(1 - x) - logB);
+}
+
+// Log Gamma function (for Beta calculations)
+function logGamma(z) {
+  const p = [676.5203681218851, -1259.1392167224028, 771.32342877765313,
+             -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+             9.9843695780195716e-6, 1.5056327351493116e-7];
+  if(z < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
+  z -= 1;
+  let x = 0.99999999999980993;
+  for(let i = 0; i < p.length; i++) x += p[i] / (z + i + 1);
+  const t = z + p.length - 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+
 /* ===== Elements ===== */
 const FLUID = document.getElementById('fluid');
 const AREA = document.getElementById('areaUnit');
@@ -638,6 +1021,285 @@ const DIST_LABELS = {
   "Known Distribution": ["P90 (Low)","P50 (Median)","P10 (High)"],
   "PERT": ["Min","Mode","Max"]
 };
+
+/* ===== Multi-Reservoir Management ===== */
+let reservoirs = [
+  { id: 0, name: 'Reservoir 1', params: {} }  // params will store distribution settings
+];
+let activeReservoirId = 0;
+
+function getActiveReservoir() {
+  return reservoirs.find(r => r.id === activeReservoirId) || reservoirs[0];
+}
+
+function switchToReservoir(resId) {
+  activeReservoirId = resId;
+  
+  // Save current reservoir params before switching
+  const currentResIdx = reservoirs.findIndex(r => r.id === activeReservoirId);
+  if(currentResIdx >= 0) {
+    saveCurrentReservoirParams();
+  }
+  
+  // Update tab UI
+  document.querySelectorAll('.res-tab').forEach(tab => {
+    tab.classList.toggle('active', parseInt(tab.dataset.resId) === resId);
+  });
+  
+  // Update content visibility
+  document.querySelectorAll('.reservoir-content').forEach(content => {
+    content.classList.toggle('active', parseInt(content.dataset.resId) === resId);
+  });
+  
+  // Load params for this reservoir
+  loadReservoirParams(resId);
+}
+
+function saveCurrentReservoirParams() {
+  const res = reservoirs.find(r => r.id === activeReservoirId);
+  if(!res) return;
+  
+  const rows = [...document.querySelectorAll(`#params .dist-row`)];
+  res.params = {};
+  
+  rows.forEach(row => {
+    const name = row.getAttribute('data-param');
+    const type = row.querySelector('.dist-type').value;
+    const v0 = row.querySelector('.v0').value;
+    const v1 = row.querySelector('.v1').value;
+    const v2 = row.querySelector('.v2').value;
+    
+    const wrow = row.nextElementSibling;
+    let w0 = '', w1 = '', w2 = '';
+    if(wrow && wrow.classList.contains('weights-row')) {
+      const ws = wrow.querySelectorAll('input');
+      w0 = ws[0].value;
+      w1 = ws[1].value;
+      w2 = ws[2].value;
+    }
+    
+    res.params[name] = { type, v0, v1, v2, w0, w1, w2 };
+  });
+  
+  // Save RF params
+  const rfType = document.querySelector('.rf-type').value;
+  const rfv0 = document.querySelector('.rf-v0').value;
+  const rfv1 = document.querySelector('.rf-v1').value;
+  const rfv2 = document.querySelector('.rf-v2').value;
+  const rfw = document.querySelectorAll('#rf-weights input');
+  res.params['__RF'] = { 
+    type: rfType, 
+    v0: rfv0, 
+    v1: rfv1, 
+    v2: rfv2,
+    w0: rfw[0].value,
+    w1: rfw[1].value,
+    w2: rfw[2].value
+  };
+}
+
+function loadReservoirParams(resId) {
+  const res = reservoirs.find(r => r.id === resId);
+  if(!res || !res.params || Object.keys(res.params).length === 0) {
+    // No saved params, keep defaults or clear
+    return;
+  }
+  
+  const rows = [...document.querySelectorAll(`#params .dist-row`)];
+  rows.forEach(row => {
+    const name = row.getAttribute('data-param');
+    const saved = res.params[name];
+    if(!saved) return;
+    
+    row.querySelector('.dist-type').value = saved.type;
+    row.querySelector('.v0').value = saved.v0 || '';
+    row.querySelector('.v1').value = saved.v1 || '';
+    row.querySelector('.v2').value = saved.v2 || '';
+    
+    // Trigger refresh for labels
+    row.querySelector('.dist-type').dispatchEvent(new Event('change'));
+    
+    const wrow = row.nextElementSibling;
+    if(wrow && wrow.classList.contains('weights-row')) {
+      const ws = wrow.querySelectorAll('input');
+      ws[0].value = saved.w0 || '';
+      ws[1].value = saved.w1 || '';
+      ws[2].value = saved.w2 || '';
+    }
+  });
+  
+  // Load RF
+  if(res.params['__RF']) {
+    const rf = res.params['__RF'];
+    document.querySelector('.rf-type').value = rf.type;
+    document.querySelector('.rf-v0').value = rf.v0 || '';
+    document.querySelector('.rf-v1').value = rf.v1 || '';
+    document.querySelector('.rf-v2').value = rf.v2 || '';
+    document.querySelector('.rf-type').dispatchEvent(new Event('change'));
+    
+    const rfw = document.querySelectorAll('#rf-weights input');
+    rfw[0].value = rf.w0 || '';
+    rfw[1].value = rf.w1 || '';
+    rfw[2].value = rf.w2 || '';
+  }
+  
+  renderDistPreviewsDebounced();
+}
+
+function addReservoir() {
+  if(reservoirs.length >= 3) {
+    alert('Maximum 3 reservoirs supported');
+    return;
+  }
+  
+  // Save current reservoir before adding new
+  saveCurrentReservoirParams();
+  
+  const newId = Math.max(...reservoirs.map(r => r.id)) + 1;
+  const newRes = {
+    id: newId,
+    name: `Reservoir ${newId + 1}`,
+    params: {}
+  };
+  reservoirs.push(newRes);
+  
+  // Update tabs UI
+  renderReservoirTabs();
+  
+  // Create new content container
+  const container = document.getElementById('reservoirContainers');
+  const newContent = document.createElement('div');
+  newContent.className = 'reservoir-content';
+  newContent.dataset.resId = newId;
+  newContent.innerHTML = `<div id="params-${newId}"></div>`;
+  container.appendChild(newContent);
+  
+  // Enable correlation section if 2+ reservoirs
+  if(reservoirs.length >= 2) {
+    document.getElementById('correlationSection').classList.remove('disabled');
+  }
+  
+  // Update correlation matrix
+  updateCorrelationMatrix();
+  
+  // Switch to new reservoir
+  switchToReservoir(newId);
+}
+
+function removeReservoir(resId) {
+  if(reservoirs.length <= 1) {
+    alert('Must have at least one reservoir');
+    return;
+  }
+  
+  const idx = reservoirs.findIndex(r => r.id === resId);
+  if(idx < 0) return;
+  
+  reservoirs.splice(idx, 1);
+  
+  // Remove content container
+  const content = document.querySelector(`.reservoir-content[data-res-id="${resId}"]`);
+  if(content) content.remove();
+  
+  // If we deleted the active one, switch to first
+  if(activeReservoirId === resId) {
+    switchToReservoir(reservoirs[0].id);
+  }
+  
+  // Update tabs
+  renderReservoirTabs();
+  
+  // Disable correlation if only 1 reservoir
+  if(reservoirs.length < 2) {
+    document.getElementById('correlationSection').classList.add('disabled');
+    document.getElementById('enableCorrelation').checked = false;
+  }
+  
+  updateCorrelationMatrix();
+}
+
+function renderReservoirTabs() {
+  const tabsContainer = document.getElementById('reservoirTabs');
+  tabsContainer.innerHTML = '';
+  
+  reservoirs.forEach((res, idx) => {
+    const tab = document.createElement('button');
+    tab.className = 'res-tab';
+    if(res.id === activeReservoirId) tab.classList.add('active');
+    tab.dataset.resId = res.id;
+    tab.innerHTML = `${res.name}`;
+    
+    if(reservoirs.length > 1) {
+      const removeBtn = document.createElement('span');
+      removeBtn.className = 'remove-res';
+      removeBtn.innerHTML = '×';
+      removeBtn.onclick = (e) => {
+        e.stopPropagation();
+        removeReservoir(res.id);
+      };
+      tab.appendChild(removeBtn);
+    }
+    
+    tab.onclick = () => switchToReservoir(res.id);
+    tabsContainer.appendChild(tab);
+  });
+  
+  // Add button
+  if(reservoirs.length < 3) {
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-res-btn';
+    addBtn.id = 'addReservoirBtn';
+    addBtn.textContent = '+ Add Reservoir';
+    addBtn.onclick = addReservoir;
+    tabsContainer.appendChild(addBtn);
+  }
+}
+
+function updateCorrelationMatrix() {
+  const n = reservoirs.length;
+  if(n < 2) {
+    document.getElementById('correlationMatrix').style.display = 'none';
+    return;
+  }
+  
+  const grid = document.getElementById('corrGrid');
+  grid.innerHTML = '';
+  
+  // Header row
+  grid.innerHTML += '<div class="param-label">Parameter</div>';
+  for(let i = 0; i < n; i++) {
+    for(let j = i+1; j < n; j++) {
+      const header = document.createElement('div');
+      header.className = 'header';
+      header.textContent = `Res${i+1}↔Res${j+1}`;
+      grid.innerHTML += header.outerHTML;
+    }
+  }
+  
+  // Parameter rows
+  const paramNames = ['Area', 'Thickness', 'Net to Gross', 'Porosity', 'Water Saturation', 'Bo/Bg', 'Recovery Factor'];
+  paramNames.forEach(pname => {
+    const label = document.createElement('div');
+    label.className = 'param-label';
+    label.textContent = pname;
+    grid.appendChild(label);
+    
+    for(let i = 0; i < n; i++) {
+      for(let j = i+1; j < n; j++) {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.1';
+        input.min = '-1';
+        input.max = '1';
+        input.value = '0.6';  // Default moderate correlation
+        input.dataset.param = pname;
+        input.dataset.res1 = i;
+        input.dataset.res2 = j;
+        grid.appendChild(input);
+      }
+    }
+  });
+}
 
 /* X-axis labels for previews */
 function xLabelFor(name){
@@ -2582,6 +3244,31 @@ document.getElementById('downloadSamples').addEventListener('click', generateSam
 /* Bootstrap */
 mountGeometrySelector();
 mountParams(); labelsAndFormula(); prefillDefaults(); renderDistPreviews();
+
+// Initialize multi-reservoir UI
+renderReservoirTabs();
+updateCorrelationMatrix();
+
+// Wire up correlation toggle
+document.getElementById('enableCorrelation').addEventListener('change', (e) => {
+  document.getElementById('correlationMatrix').style.display = e.target.checked ? 'block' : 'none';
+});
+
+// Wire up correlation presets
+document.querySelectorAll('.corr-presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = btn.dataset.preset;
+    let value = 0;
+    if(preset === 'weak') value = 0.3;
+    if(preset === 'moderate') value = 0.6;
+    if(preset === 'strong') value = 0.8;
+    
+    document.querySelectorAll('#corrGrid input[type="number"]').forEach(inp => {
+      inp.value = value;
+    });
+  });
+});
+
 </script>
 </body>
 </html>
