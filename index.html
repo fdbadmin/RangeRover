@@ -1675,7 +1675,12 @@ function prefillDefaults(){
   } else {
     D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"__RF":[0.5,0.05]};
   }
-  document.querySelectorAll('#params .dist-row').forEach(row=>{
+  
+  // Prefill for active reservoir (should be reservoir 0 at startup)
+  const activeContainer = document.querySelector(`.reservoir-content.active .params-container`);
+  if(!activeContainer) return;
+  
+  activeContainer.querySelectorAll('.dist-row').forEach(row=>{
     const name=row.getAttribute('data-param');
     const pair=D[name]; const sel=row.querySelector('.dist-type'); sel.value='Normal';
     const v0=row.querySelector('.v0'), v1=row.querySelector('.v1'), v2=row.querySelector('.v2');
@@ -1686,6 +1691,7 @@ function prefillDefaults(){
       const ws = wrow.querySelectorAll('input'); ws[0].value='33'; ws[1].value='33'; ws[2].value='34';
     }
   });
+  
   document.querySelector('.rf-type').value='Normal';
   document.querySelector('.rf-v0').value=D['__RF'][0];
   document.querySelector('.rf-v1').value=D['__RF'][1];
