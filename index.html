@@ -2178,6 +2178,37 @@ function generateSamplesCSV() {
   }
 }
 
+/* ===== Helper: Sample from distribution ===== */
+function sampleFromDistribution(type, valsConv, weightsPerc, rnd, bounds) {
+  const {min, max} = bounds;
+  
+  if (type === 'Discrete') {
+    const {vals, weights} = discreteValsAndWeights(valsConv, weightsPerc);
+    if (vals.length === 0) return NaN;
+    const u = rnd();
+    let acc = 0;
+    for (let i = 0; i < vals.length; i++) {
+      acc += weights[i];
+      if (u <= acc) {
+        return Math.max(min, Math.min(max, vals[i]));
+      }
+    }
+    return Math.max(min, Math.min(max, vals[vals.length - 1]));
+  } else if (type === 'Triangular') {
+    return sampleTriangular(rnd, valsConv[0], valsConv[1], valsConv[2]);
+  } else if (type === 'Uniform') {
+    return sampleUniform(rnd, valsConv[0], valsConv[2]);
+  } else if (type === 'Normal') {
+    return sampleNormalTrunc(rnd, valsConv[0], valsConv[1], min, max);
+  } else if (type === 'PERT') {
+    const x = samplePERT(rnd, valsConv[0], valsConv[1], valsConv[2], 4);
+    return Math.max(min, Math.min(max, x));
+  } else { // 'Known Distribution'
+    const {mean, sigma} = normalFromP90P50P10(valsConv[0], valsConv[1], valsConv[2]);
+    return sampleNormalTrunc(rnd, mean, sigma, min, max);
+  }
+}
+
 /* ===== Multi-Reservoir Simulation ===== */
 function runMultiReservoirSimulation() {
   const err = document.getElementById('error');
@@ -2302,7 +2333,7 @@ function runMultiReservoirSimulation() {
   // Sample parameters and calculate volumes
   for (let iter = 0; iter < n; iter++) {
     // Sample RF once per iteration (shared)
-    const rf = sampleDist(rfType, rfRaw, rfPerc, rnd, boundsFor('Recovery Factor', 'oil'));
+    const rf = sampleFromDistribution(rfType, rfRaw, rfPerc, rnd, boundsFor('Recovery Factor', 'oil'));
     
     // Sample parameters for each reservoir
     const sampledParams = {};
@@ -2316,7 +2347,7 @@ function runMultiReservoirSimulation() {
         sampledParams[resData.id] = {};
         for(const dist of resData.dists) {
           const bounds = boundsFor(dist.name, resData.fluidType);
-          sampledParams[resData.id][dist.name] = sampleDist(dist.type, dist.v, dist.wPerc, rnd, bounds);
+          sampledParams[resData.id][dist.name] = sampleFromDistribution(dist.type, dist.v, dist.wPerc, rnd, bounds);
         }
       }
     }
