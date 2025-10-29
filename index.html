@@ -1665,7 +1665,9 @@ document.addEventListener('change', (e)=>{ if(e.target && e.target.id==='grvUnit
 
 function renderDistPreviews(){
   const grid=document.getElementById('previewGrid'); grid.innerHTML='';
-  const rows=[...document.querySelectorAll('#params .dist-row')];
+  const activeContainer = document.querySelector('.reservoir-content.active .params-container');
+  if(!activeContainer) return;
+  const rows=[...activeContainer.querySelectorAll('.dist-row')];
   const fluid=FLUID.value;
 
   const entries = rows.map(row=>{
@@ -2087,7 +2089,12 @@ function runSimulation() {
     const fluid = FLUID.value;
   const resultType = ((fluid === 'oilgas' || fluid==='gasvo') && document.getElementById('resultType')) ? document.getElementById('resultType').value : null;
     console.log('fluid:', fluid, 'resultType:', resultType);
-    const rows = [...document.querySelectorAll('#params .dist-row')];
+    const activeContainer = document.querySelector('.reservoir-content.active .params-container');
+    if(!activeContainer) {
+        err.textContent = "No active reservoir found.";
+        return;
+    }
+    const rows = [...activeContainer.querySelectorAll('.dist-row')];
     const dists = [];
     for (const row of rows) {
         const name = row.getAttribute('data-param');
