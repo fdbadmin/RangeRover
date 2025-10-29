@@ -1371,6 +1371,7 @@ function addWeightsRow(afterEl, idPrefix){
 }
 
 function mountParamsForReservoir(resId) {
+  console.log('mountParamsForReservoir called with resId:', resId, 'PARAMS:', PARAMS);
   const host = document.querySelector(`.params-container[data-res-id="${resId}"]`);
   if(!host) {
     console.error('No params container found for reservoir', resId);
@@ -1631,9 +1632,10 @@ function prefillDefaults(resId = null){
   if(resId === 0 || resId === null) {
     document.querySelector('.rf-type').value='Normal';
     document.querySelector('.rf-v0').value=D['__RF'][0];
-  document.querySelector('.rf-v1').value=D['__RF'][1];
-  document.querySelector('.rf-v2').value='';
-  const rfws=document.querySelectorAll('#rf-weights input'); rfws[0].value='33'; rfws[1].value='33'; rfws[2].value='34';
+    document.querySelector('.rf-v1').value=D['__RF'][1];
+    document.querySelector('.rf-v2').value='';
+    const rfws=document.querySelectorAll('#rf-weights input'); rfws[0].value='33'; rfws[1].value='33'; rfws[2].value='34';
+  }
 }
 
 /* Helpers */
