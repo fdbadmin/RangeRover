@@ -1452,86 +1452,12 @@ function mountParamsForReservoir(resId) {
 function mountParams(){
   // Mount params for first reservoir (id=0)
   mountParamsForReservoir(0);
-  host.innerHTML='';
-  PARAMS.forEach(p=>{
-    const unit = p.name==="Bo" ? "(RB/STB)" 
-      : p.name==="Bg" ? "(scf/SCF)" 
-      : p.name==="Rs" ? "(scf/bbl)" 
-      : p.name==="Rv" ? "(bbl/scf)" 
-      : p.name==="Coal Density" ? "(g/cm³)" 
-      : p.name==="Gas Content" ? "(m³/ton)" 
-      : isFrac(p.name) ? "(fraction)" 
-      : "";
-    const row = document.createElement('div');
-    row.className = 'dist-row';
-    row.setAttribute('data-param', p.name);
-    row.innerHTML = `
-      <label>${p.name} ${unit}</label>
-      <div class="field">
-        <div class="slabel">Distribution</div>
-        <select class="dist-type">
-          <option>Discrete</option><option>Triangular</option><option>Uniform</option>
-          <option>PERT</option>
-          <option selected>Normal</option><option>Known Distribution</option>
-        </select>
-      </div>
-      <div class="field">
-        <div class="slabel l0">${DIST_LABELS['Normal'][0]}</div>
-        <input class="v v0" type="number" step="any">
-      </div>
-      <div class="field">
-        <div class="slabel l1">${DIST_LABELS['Normal'][1]}</div>
-        <input class="v v1" type="number" step="any">
-      </div>
-      <div class="field">
-        <div class="slabel l2">${DIST_LABELS['Normal'][2]}</div>
-        <input class="v v2" type="number" step="any">
-      </div>`;
-    host.appendChild(row);
-    const weights = addWeightsRow(row, p.name.replace(/\s+/g,'_'));
-    const sel = row.querySelector('.dist-type');
-    const inputs = [...row.querySelectorAll('input.v')];
-    const labs = [row.querySelector('.l0'),row.querySelector('.l1'),row.querySelector('.l2')];
-    function refresh(){
-      const L=DIST_LABELS[sel.value];
-      labs.forEach((lab,i)=>{
-        lab.textContent = L[i];
-        const ignore = L[i].includes('(ignore)');
-        lab.classList.toggle('disabled', ignore);
-        // Hide the entire field when "(ignore)"
-        const fieldDiv = labs[i].closest('.field');
-        if(ignore){
-          inputs[i].disabled = true;
-          inputs[i].value = '';
-          fieldDiv && fieldDiv.classList.add('hidden-field');
-        }else{
-          inputs[i].disabled = false;
-          fieldDiv && fieldDiv.classList.remove('hidden-field');
-        }
-      });
-      // Weights row visibility + separator handling
-      const rowEl = sel.closest('.dist-row');
-      if(sel.value==='Discrete'){
-        weights.classList.remove('hidden');
-        weights.classList.add('show-sep');
-        rowEl && rowEl.classList.add('with-weights');
-      }else{
-        weights.classList.add('hidden');
-        weights.classList.remove('show-sep');
-        rowEl && rowEl.classList.remove('with-weights');
-      }
-      renderDistPreviewsDebounced();
-    }
-    sel.addEventListener('change', refresh);
-    inputs.forEach(inp => inp.addEventListener('input', renderDistPreviewsDebounced));
-    weights.querySelectorAll('input').forEach(w=>w.addEventListener('input', renderDistPreviewsDebounced));
-    refresh();
-  });
-
-  // RF labels switch too
+  
+  // Set up Recovery Factor event listeners
   const rfSel = document.querySelector('.rf-type');
   const rfWeights = document.getElementById('rf-weights');
   const rfLabs = [document.querySelector('.rf-l0'),document.querySelector('.rf-l1'),document.querySelector('.rf-l2')];
+  
   function rfRefresh(){
     const L=DIST_LABELS[rfSel.value];
     const rfInputs=[...document.querySelectorAll('.rf-v')];
@@ -1558,12 +1484,11 @@ function mountParams(){
     }
     renderDistPreviewsDebounced();
   }
+  
   rfSel.addEventListener('change', rfRefresh);
   rfWeights.querySelectorAll('input').forEach(w=>w.addEventListener('input', renderDistPreviewsDebounced));
   document.querySelectorAll('.rf-v').forEach(inp=>inp.addEventListener('input', renderDistPreviewsDebounced));
   rfRefresh();
-labelsAndFormula();
-  renderDistPreviewsDebounced();
 }
 
 function labelsForUI(){ return labelsFor(FLUID.value); }
