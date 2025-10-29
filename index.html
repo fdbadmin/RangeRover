@@ -1201,6 +1201,9 @@ function addReservoir() {
   // Mount params for new reservoir
   mountParamsForReservoir(newId);
   
+  // Prefill default values for new reservoir
+  prefillDefaults(newId);
+  
   // Enable correlation section if 2+ reservoirs
   if(reservoirs.length >= 2) {
     document.getElementById('correlationSection').classList.remove('disabled');
@@ -1589,7 +1592,7 @@ function updateFluidUI(){
 FLUID.addEventListener('change', updateFluidUI);
 
 /* Defaults so it's runnable */
-function prefillDefaults(){
+function prefillDefaults(resId = null){
   let D;
   if(FLUID.value === 'gas') {
     D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"__RF":[0.5,0.05]};
@@ -1597,15 +1600,22 @@ function prefillDefaults(){
     D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"Rs":[800,100],"__RF":[0.5,0.05]};
   } else if(FLUID.value === 'gasvo') {
     D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bg":[0.005,0.001],"Rv":[0.001,0.0002],"__RF":[0.5,0.05]};
+  } else if(FLUID.value === 'csg') {
+    D = {"Area":[50,10],"Thickness":[60,10],"Net to Gross":[0.6,0.15],"Coal Density":[1.4,0.1],"Gas Content":[10,2],"__RF":[0.5,0.05]};
   } else {
     D = {"Area":[50,10],"Thickness":[50,10],"Net to Gross":[0.6,0.2],"Porosity":[0.2,0.05],"Water Saturation":[0.3,0.1],"Bo":[1.3,0.1],"__RF":[0.5,0.05]};
   }
   
-  // Prefill for active reservoir (should be reservoir 0 at startup)
-  const activeContainer = document.querySelector(`.reservoir-content.active .params-container`);
-  if(!activeContainer) return;
+  // Prefill for specified reservoir or active reservoir
+  let container;
+  if(resId !== null) {
+    container = document.querySelector(`.params-container[data-res-id="${resId}"]`);
+  } else {
+    container = document.querySelector(`.reservoir-content.active .params-container`);
+  }
+  if(!container) return;
   
-  activeContainer.querySelectorAll('.dist-row').forEach(row=>{
+  container.querySelectorAll('.dist-row').forEach(row=>{
     const name=row.getAttribute('data-param');
     const pair=D[name]; const sel=row.querySelector('.dist-type'); sel.value='Normal';
     const v0=row.querySelector('.v0'), v1=row.querySelector('.v1'), v2=row.querySelector('.v2');
@@ -1617,8 +1627,10 @@ function prefillDefaults(){
     }
   });
   
-  document.querySelector('.rf-type').value='Normal';
-  document.querySelector('.rf-v0').value=D['__RF'][0];
+  // Only set RF defaults if this is the first/active reservoir (RF is shared across all reservoirs)
+  if(resId === 0 || resId === null) {
+    document.querySelector('.rf-type').value='Normal';
+    document.querySelector('.rf-v0').value=D['__RF'][0];
   document.querySelector('.rf-v1').value=D['__RF'][1];
   document.querySelector('.rf-v2').value='';
   const rfws=document.querySelectorAll('#rf-weights input'); rfws[0].value='33'; rfws[1].value='33'; rfws[2].value='34';
