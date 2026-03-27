@@ -845,7 +845,7 @@ function isPositiveDefinite(matrix) {
 
 function rankArray(arr) {
   const n = arr.length;
-  const indexed = arr.map((v, i) => ({ v, i }));
+  const indexed = Array.from(arr, (v, i) => ({ v, i }));
   indexed.sort((a, b) => a.v - b.v);
   const ranks = new Float64Array(n);
   for (let i = 0; i < n; i++) ranks[indexed[i].i] = i;
