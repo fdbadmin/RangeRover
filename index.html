@@ -230,6 +230,7 @@
   .preset-btns{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap}
   .preset-btns button{padding:4px 10px;font-size:11px;border-radius:6px}
   .reservoir-name-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;width:140px}
+  .inter-res-hint{font-size:12px;color:var(--muted);margin:4px 0}
 
 </style>
 </head>
@@ -351,6 +352,15 @@
         <h4 class="subsection">Shared Parameters</h4>
         <p style="font-size:12px;color:var(--muted);margin:4px 0">Link parameters to use same draws as another reservoir. Shared parameters override local correlations.</p>
         <div id="sharedLinks" class="shared-link"></div>
+      </div>
+
+      <!-- Advanced: Inter-Reservoir Dependencies -->
+      <div class="adv-section" id="interReservoirCorrSection">
+        <hr class="sep"/>
+        <h4 class="subsection">Inter-Reservoir Dependencies</h4>
+        <p class="inter-res-hint">Controls how reservoir volumes co-move. ρ=1 means perfectly correlated draws; ρ=0 means independent. Applied to in-place volumes via Iman-Conover after per-reservoir sampling.</p>
+        <div id="interResCorrMatrix" class="corr-matrix"></div>
+        <div id="interResCorrWarn" class="corr-warn"></div>
       </div>
 
       <div class="btns">

@@ -1187,16 +1187,25 @@ function switchReservoirTab(idx) {
 function addReservoir() {
   if (reservoirs.length >= 5) return;
   saveReservoirToState();
+  interReservoirCorr = readInterReservoirCorrMatrix();
   const newR = createDefaultReservoirState(reservoirs.length);
   reservoirs.push(newR);
   activeReservoirIdx = reservoirs.length - 1;
   loadReservoirFromState(activeReservoirIdx);
   renderReservoirTabs();
   updateResultsViewSelector();
+  buildInterReservoirCorrMatrix();
 }
 
 function removeReservoir(idx) {
   if (reservoirs.length <= 1) return;
+  interReservoirCorr = readInterReservoirCorrMatrix();
+  // Remove row/col from saved inter-reservoir corr
+  if (interReservoirCorr) {
+    interReservoirCorr.splice(idx, 1);
+    interReservoirCorr.forEach(row => row.splice(idx, 1));
+    if (interReservoirCorr.length < 2) interReservoirCorr = null;
+  }
   reservoirs.splice(idx, 1);
   // Re-index
   reservoirs.forEach((r, i) => r.id = i);
@@ -1204,6 +1213,7 @@ function removeReservoir(idx) {
   loadReservoirFromState(activeReservoirIdx);
   renderReservoirTabs();
   updateResultsViewSelector();
+  buildInterReservoirCorrMatrix();
 }
 
 function toggleAdvancedMode(enabled) {
@@ -1221,6 +1231,7 @@ function toggleAdvancedMode(enabled) {
     buildCorrelationMatrix();
     buildSharedLinksUI();
     updateResultsViewSelector();
+    buildInterReservoirCorrMatrix();
   } else {
     // Switching back to basic: load reservoir 0 if it exists
     if (reservoirs.length > 0) {
@@ -1396,6 +1407,94 @@ function updateResultsViewSelector() {
   });
 }
 
+/* ===== 22b. INTER-RESERVOIR CORRELATION MATRIX ===== */
+let interReservoirCorr = null; // global N×N matrix (null = independent)
+
+function buildInterReservoirCorrMatrix() {
+  const container = document.getElementById('interResCorrMatrix');
+  if (!container) return;
+  container.innerHTML = '';
+  const n = reservoirs.length;
+  if (n < 2) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:12px">Add a second reservoir to define inter-reservoir dependencies.</p>';
+    return;
+  }
+
+  const names = reservoirs.map((r, i) => r.name || `R${i + 1}`);
+  container.style.gridTemplateColumns = `80px repeat(${n}, 72px)`;
+
+  // Header row
+  const spacer = document.createElement('div'); spacer.className = 'hdr'; spacer.textContent = '';
+  container.appendChild(spacer);
+  for (let j = 0; j < n; j++) {
+    const hdr = document.createElement('div'); hdr.className = 'hdr';
+    hdr.textContent = names[j].length > 8 ? names[j].slice(0, 8) + '…' : names[j];
+    hdr.title = names[j];
+    container.appendChild(hdr);
+  }
+
+  // Read existing values
+  const existing = interReservoirCorr;
+
+  // Data rows
+  for (let i = 0; i < n; i++) {
+    const rowHdr = document.createElement('div'); rowHdr.className = 'hdr'; rowHdr.style.textAlign = 'right';
+    rowHdr.textContent = names[i].length > 8 ? names[i].slice(0, 8) + '…' : names[i];
+    rowHdr.title = names[i];
+    container.appendChild(rowHdr);
+    for (let j = 0; j < n; j++) {
+      if (i === j) {
+        const diag = document.createElement('div'); diag.className = 'diag'; diag.textContent = '1';
+        container.appendChild(diag);
+      } else if (j < i) {
+        const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.1'; inp.min = '0'; inp.max = '1';
+        inp.setAttribute('data-row', i); inp.setAttribute('data-col', j);
+        const val = (existing && existing[i] && existing[i][j] !== undefined) ? existing[i][j] : 0;
+        inp.value = val;
+        inp.addEventListener('input', validateInterReservoirCorrUI);
+        container.appendChild(inp);
+      } else {
+        const empty = document.createElement('div'); empty.className = 'diag'; empty.textContent = '';
+        container.appendChild(empty);
+      }
+    }
+  }
+  validateInterReservoirCorrUI();
+}
+
+function readInterReservoirCorrMatrix() {
+  const container = document.getElementById('interResCorrMatrix');
+  if (!container) return null;
+  const n = reservoirs.length;
+  if (n < 2) return null;
+  const matrix = Array.from({ length: n }, (_, i) => {
+    const row = new Array(n).fill(0);
+    row[i] = 1;
+    return row;
+  });
+  const inputs = container.querySelectorAll('input[data-row][data-col]');
+  let hasNonZero = false;
+  inputs.forEach(inp => {
+    const i = parseInt(inp.getAttribute('data-row'));
+    const j = parseInt(inp.getAttribute('data-col'));
+    const val = parseFloat(inp.value) || 0;
+    const clamped = Math.max(-1, Math.min(1, val));
+    matrix[i][j] = clamped;
+    matrix[j][i] = clamped;
+    if (Math.abs(clamped) > 1e-10) hasNonZero = true;
+  });
+  return hasNonZero ? matrix : null;
+}
+
+function validateInterReservoirCorrUI() {
+  const warn = document.getElementById('interResCorrWarn');
+  if (!warn) return;
+  const matrix = readInterReservoirCorrMatrix();
+  if (!matrix) { warn.textContent = ''; return; }
+  if (isPositiveDefinite(matrix)) { warn.textContent = ''; warn.style.color = ''; }
+  else { warn.textContent = '⚠ Inter-reservoir correlation matrix is not positive definite. Adjust values or correlations will be ignored.'; warn.style.color = '#B91C1C'; }
+}
+
 /* ===== 23. MULTI-RESERVOIR SIMULATION ===== */
 function runMultiReservoirSimulation() {
   const err = document.getElementById('error');
@@ -1476,6 +1575,19 @@ function runMultiReservoirSimulation() {
       rfType: cfg.rfType, rfRaw: cfg.rfRaw, rfPerc: cfg.rfPerc,
       samples: allSamples[rIdx]
     });
+  }
+
+  // Phase 4b: Apply inter-reservoir Iman-Conover (volume-level)
+  const irCorr = readInterReservoirCorrMatrix();
+  if (irCorr && perReservoir.length >= 2) {
+    const primCols = perReservoir.map(r => r.primary);
+    const recCols = perReservoir.map(r => r.rec);
+    const reorderedPrim = imanConover(primCols, irCorr);
+    const reorderedRec = imanConover(recCols, irCorr);
+    for (let rIdx = 0; rIdx < perReservoir.length; rIdx++) {
+      perReservoir[rIdx].primary = reorderedPrim[rIdx];
+      perReservoir[rIdx].rec = reorderedRec[rIdx];
+    }
   }
 
   // Phase 5: Aggregate (sum in common units)
@@ -1736,6 +1848,7 @@ if (reservoirNameInput) {
     if (reservoirs[activeReservoirIdx]) {
       reservoirs[activeReservoirIdx].name = reservoirNameInput.value;
       renderReservoirTabs();
+      buildInterReservoirCorrMatrix();
     }
   });
 }
