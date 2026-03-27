@@ -231,6 +231,12 @@
   .preset-btns button{padding:4px 10px;font-size:11px;border-radius:6px}
   .reservoir-name-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;width:140px}
   .inter-res-hint{font-size:12px;color:var(--muted);margin:4px 0}
+  .cross-res-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+  .cross-res-table th,.cross-res-table td{padding:6px 4px;border-bottom:1px solid var(--border);text-align:center}
+  .cross-res-table th{font-weight:600;color:var(--muted);font-size:11px;white-space:nowrap}
+  .cross-res-table td:first-child,.cross-res-table th:first-child{text-align:left;font-weight:600;min-width:100px}
+  .cross-res-table input{width:56px;padding:4px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:12px}
+  .cross-res-table .disabled-cell{color:#d1d5db;font-size:11px}
 
 </style>
 </head>
@@ -357,9 +363,9 @@
       <!-- Advanced: Inter-Reservoir Dependencies -->
       <div class="adv-section" id="interReservoirCorrSection">
         <hr class="sep"/>
-        <h4 class="subsection">Inter-Reservoir Dependencies</h4>
-        <p class="inter-res-hint">Controls how reservoir volumes co-move. ρ=1 means perfectly correlated draws; ρ=0 means independent. Applied to in-place volumes via Iman-Conover after per-reservoir sampling.</p>
-        <div id="interResCorrMatrix" class="corr-matrix"></div>
+        <h4 class="subsection">Inter-Reservoir Parameter Correlations</h4>
+        <p class="inter-res-hint">Set Spearman ρ between the same parameter in different reservoirs (e.g. Porosity in R1 vs R2). ρ=1 means perfectly correlated draws; ρ=0 means independent. Combined with intra-reservoir correlations and applied via Iman-Conover.</p>
+        <div id="interResCorrMatrix"></div>
         <div id="interResCorrWarn" class="corr-warn"></div>
       </div>
 
@@ -1739,25 +1745,29 @@ function switchReservoirTab(idx) {
 function addReservoir() {
   if (reservoirs.length >= 5) return;
   saveReservoirToState();
-  interReservoirCorr = readInterReservoirCorrMatrix();
+  saveCrossReservoirCorr();
   const newR = createDefaultReservoirState(reservoirs.length);
   reservoirs.push(newR);
   activeReservoirIdx = reservoirs.length - 1;
   loadReservoirFromState(activeReservoirIdx);
   renderReservoirTabs();
   updateResultsViewSelector();
-  buildInterReservoirCorrMatrix();
+  buildCrossReservoirCorrTable();
 }
 
 function removeReservoir(idx) {
   if (reservoirs.length <= 1) return;
-  interReservoirCorr = readInterReservoirCorrMatrix();
-  // Remove row/col from saved inter-reservoir corr
-  if (interReservoirCorr) {
-    interReservoirCorr.splice(idx, 1);
-    interReservoirCorr.forEach(row => row.splice(idx, 1));
-    if (interReservoirCorr.length < 2) interReservoirCorr = null;
+  saveCrossReservoirCorr();
+  // Re-key cross-reservoir correlations after removal
+  const newCorr = {};
+  for (const [pairKey, params] of Object.entries(crossReservoirCorr)) {
+    const [a, b] = pairKey.split('-').map(Number);
+    if (a === idx || b === idx) continue; // drop pairs involving removed reservoir
+    const newA = a > idx ? a - 1 : a;
+    const newB = b > idx ? b - 1 : b;
+    newCorr[`${newA}-${newB}`] = params;
   }
+  crossReservoirCorr = newCorr;
   reservoirs.splice(idx, 1);
   // Re-index
   reservoirs.forEach((r, i) => r.id = i);
@@ -1765,7 +1775,7 @@ function removeReservoir(idx) {
   loadReservoirFromState(activeReservoirIdx);
   renderReservoirTabs();
   updateResultsViewSelector();
-  buildInterReservoirCorrMatrix();
+  buildCrossReservoirCorrTable();
 }
 
 function toggleAdvancedMode(enabled) {
@@ -1783,7 +1793,7 @@ function toggleAdvancedMode(enabled) {
     buildCorrelationMatrix();
     buildSharedLinksUI();
     updateResultsViewSelector();
-    buildInterReservoirCorrMatrix();
+    buildCrossReservoirCorrTable();
   } else {
     // Switching back to basic: load reservoir 0 if it exists
     if (reservoirs.length > 0) {
@@ -1959,12 +1969,14 @@ function updateResultsViewSelector() {
   });
 }
 
-/* ===== 22b. INTER-RESERVOIR CORRELATION MATRIX ===== */
-let interReservoirCorr = null; // global N×N matrix (null = independent)
+/* ===== 22b. CROSS-RESERVOIR PARAMETER CORRELATIONS ===== */
+let crossReservoirCorr = {}; // { "0-1": { "Area": 0.5, "Porosity": 0.3, ... }, ... }
 
-function buildInterReservoirCorrMatrix() {
+function buildCrossReservoirCorrTable() {
   const container = document.getElementById('interResCorrMatrix');
   if (!container) return;
+  // Save current values before rebuilding
+  saveCrossReservoirCorr();
   container.innerHTML = '';
   const n = reservoirs.length;
   if (n < 2) {
@@ -1972,79 +1984,147 @@ function buildInterReservoirCorrMatrix() {
     return;
   }
 
-  const names = reservoirs.map((r, i) => r.name || `R${i + 1}`);
-  container.style.gridTemplateColumns = `80px repeat(${n}, 72px)`;
+  // Collect each reservoir's param names (including RF)
+  const allParamSets = reservoirs.map(r => {
+    const params = paramsFor(r.fluid).map(p => p.name);
+    params.push('Recovery Factor');
+    return params;
+  });
 
-  // Header row
-  const spacer = document.createElement('div'); spacer.className = 'hdr'; spacer.textContent = '';
-  container.appendChild(spacer);
-  for (let j = 0; j < n; j++) {
-    const hdr = document.createElement('div'); hdr.className = 'hdr';
-    hdr.textContent = names[j].length > 8 ? names[j].slice(0, 8) + '…' : names[j];
-    hdr.title = names[j];
-    container.appendChild(hdr);
+  // Build reservoir pairs
+  const pairs = [];
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++)
+      pairs.push([i, j]);
+
+  // Collect all unique param names that appear in at least one pair of reservoirs
+  const allUniqueParams = [...new Set(allParamSets.flat())];
+
+  // Build table
+  const table = document.createElement('table');
+  table.className = 'cross-res-table';
+
+  // Header
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  headerRow.innerHTML = '<th>Parameter</th>';
+  for (const [i, j] of pairs) {
+    const th = document.createElement('th');
+    const ni = reservoirs[i].name || `R${i + 1}`;
+    const nj = reservoirs[j].name || `R${j + 1}`;
+    th.textContent = `${ni} ↔ ${nj}`;
+    th.title = `${ni} ↔ ${nj}`;
+    headerRow.appendChild(th);
+  }
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  // Body
+  const tbody = document.createElement('tbody');
+  for (const param of allUniqueParams) {
+    // Only show if param exists in at least 2 reservoirs
+    const count = allParamSets.filter(ps => ps.includes(param)).length;
+    if (count < 2) continue;
+
+    const tr = document.createElement('tr');
+    const tdName = document.createElement('td');
+    tdName.textContent = param;
+    tr.appendChild(tdName);
+
+    for (const [i, j] of pairs) {
+      const td = document.createElement('td');
+      const existsInI = allParamSets[i].includes(param);
+      const existsInJ = allParamSets[j].includes(param);
+      if (existsInI && existsInJ) {
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.step = '0.1'; inp.min = '-1'; inp.max = '1';
+        const pairKey = `${i}-${j}`;
+        inp.setAttribute('data-pair', pairKey);
+        inp.setAttribute('data-param', param);
+        const saved = crossReservoirCorr[pairKey];
+        inp.value = (saved && saved[param] !== undefined) ? saved[param] : 0;
+        td.appendChild(inp);
+      } else {
+        td.textContent = '—';
+        td.className = 'disabled-cell';
+      }
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+function saveCrossReservoirCorr() {
+  const container = document.getElementById('interResCorrMatrix');
+  if (!container) return;
+  const inputs = container.querySelectorAll('input[data-pair][data-param]');
+  if (inputs.length === 0) return; // nothing to save
+  const newCorr = {};
+  inputs.forEach(inp => {
+    const pair = inp.getAttribute('data-pair');
+    const param = inp.getAttribute('data-param');
+    const val = parseFloat(inp.value) || 0;
+    if (!newCorr[pair]) newCorr[pair] = {};
+    newCorr[pair][param] = Math.max(-1, Math.min(1, val));
+  });
+  crossReservoirCorr = newCorr;
+}
+
+function readCrossReservoirCorr() {
+  saveCrossReservoirCorr();
+  return crossReservoirCorr;
+}
+
+/* ===== 22c. UNIFIED BLOCK CORRELATION MATRIX ===== */
+function buildFullCorrelationMatrix(configs, crossCorr) {
+  // Build flat list of { rIdx, name } for all params across all reservoirs
+  const allParams = [];
+  for (let rIdx = 0; rIdx < configs.length; rIdx++) {
+    for (const d of configs[rIdx].dists) allParams.push({ rIdx, name: d.name });
+    allParams.push({ rIdx, name: 'Recovery Factor' });
   }
 
-  // Read existing values
-  const existing = interReservoirCorr;
+  const m = allParams.length;
+  const matrix = Array.from({ length: m }, () => new Array(m).fill(0));
+  for (let i = 0; i < m; i++) matrix[i][i] = 1;
 
-  // Data rows
-  for (let i = 0; i < n; i++) {
-    const rowHdr = document.createElement('div'); rowHdr.className = 'hdr'; rowHdr.style.textAlign = 'right';
-    rowHdr.textContent = names[i].length > 8 ? names[i].slice(0, 8) + '…' : names[i];
-    rowHdr.title = names[i];
-    container.appendChild(rowHdr);
-    for (let j = 0; j < n; j++) {
-      if (i === j) {
-        const diag = document.createElement('div'); diag.className = 'diag'; diag.textContent = '1';
-        container.appendChild(diag);
-      } else if (j < i) {
-        const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.1'; inp.min = '0'; inp.max = '1';
-        inp.setAttribute('data-row', i); inp.setAttribute('data-col', j);
-        const val = (existing && existing[i] && existing[i][j] !== undefined) ? existing[i][j] : 0;
-        inp.value = val;
-        inp.addEventListener('input', validateInterReservoirCorrUI);
-        container.appendChild(inp);
-      } else {
-        const empty = document.createElement('div'); empty.className = 'diag'; empty.textContent = '';
-        container.appendChild(empty);
+  // Fill intra-reservoir blocks from per-reservoir correlation matrices
+  for (let i = 0; i < m; i++) {
+    for (let j = i + 1; j < m; j++) {
+      if (allParams[i].rIdx !== allParams[j].rIdx) continue;
+      const rIdx = allParams[i].rIdx;
+      const corrMatrix = configs[rIdx].corrMatrix;
+      if (!corrMatrix) continue;
+      const paramNames = configs[rIdx].dists.map(d => d.name);
+      const iLocal = paramNames.indexOf(allParams[i].name);
+      const jLocal = paramNames.indexOf(allParams[j].name);
+      if (iLocal >= 0 && jLocal >= 0) {
+        matrix[i][j] = corrMatrix[iLocal][jLocal];
+        matrix[j][i] = corrMatrix[iLocal][jLocal];
       }
     }
   }
-  validateInterReservoirCorrUI();
-}
 
-function readInterReservoirCorrMatrix() {
-  const container = document.getElementById('interResCorrMatrix');
-  if (!container) return null;
-  const n = reservoirs.length;
-  if (n < 2) return null;
-  const matrix = Array.from({ length: n }, (_, i) => {
-    const row = new Array(n).fill(0);
-    row[i] = 1;
-    return row;
-  });
-  const inputs = container.querySelectorAll('input[data-row][data-col]');
-  let hasNonZero = false;
-  inputs.forEach(inp => {
-    const i = parseInt(inp.getAttribute('data-row'));
-    const j = parseInt(inp.getAttribute('data-col'));
-    const val = parseFloat(inp.value) || 0;
-    const clamped = Math.max(-1, Math.min(1, val));
-    matrix[i][j] = clamped;
-    matrix[j][i] = clamped;
-    if (Math.abs(clamped) > 1e-10) hasNonZero = true;
-  });
-  return hasNonZero ? matrix : null;
-}
+  // Fill cross-reservoir blocks (same parameter in different reservoirs)
+  for (let i = 0; i < m; i++) {
+    for (let j = i + 1; j < m; j++) {
+      if (allParams[i].rIdx === allParams[j].rIdx) continue;
+      if (allParams[i].name !== allParams[j].name) continue;
+      const lo = Math.min(allParams[i].rIdx, allParams[j].rIdx);
+      const hi = Math.max(allParams[i].rIdx, allParams[j].rIdx);
+      const pairKey = `${lo}-${hi}`;
+      const pairCorr = crossCorr[pairKey];
+      if (pairCorr && pairCorr[allParams[i].name] !== undefined) {
+        const rho = pairCorr[allParams[i].name];
+        matrix[i][j] = rho;
+        matrix[j][i] = rho;
+      }
+    }
+  }
 
-function validateInterReservoirCorrUI() {
-  const warn = document.getElementById('interResCorrWarn');
-  if (!warn) return;
-  const matrix = readInterReservoirCorrMatrix();
-  if (!matrix) { warn.textContent = ''; return; }
-  if (isPositiveDefinite(matrix)) { warn.textContent = ''; warn.style.color = ''; }
-  else { warn.textContent = '⚠ Inter-reservoir correlation matrix is not positive definite. Adjust values or correlations will be ignored.'; warn.style.color = '#B91C1C'; }
+  return { allParams, matrix };
 }
 
 /* ===== 23. MULTI-RESERVOIR SIMULATION ===== */
@@ -2101,15 +2181,20 @@ function runMultiReservoirSimulation() {
     }
   }
 
-  // Phase 3: Apply Iman-Conover per reservoir
-  for (let rIdx = 0; rIdx < configs.length; rIdx++) {
-    const corrMatrix = configs[rIdx].corrMatrix;
-    if (!corrMatrix) continue;
-    const paramNames = configs[rIdx].dists.map(d => d.name);
-    const columns = paramNames.map(name => allSamples[rIdx][name]);
-    const reordered = imanConover(columns, corrMatrix);
-    for (let j = 0; j < paramNames.length; j++) {
-      allSamples[rIdx][paramNames[j]] = reordered[j];
+  // Phase 3: Unified Iman-Conover (intra-reservoir + cross-reservoir correlations)
+  const crossCorr = readCrossReservoirCorr();
+  const { allParams: icParams, matrix: fullCorrMatrix } = buildFullCorrelationMatrix(configs, crossCorr);
+  const hasAnyCorrelation = fullCorrMatrix.some((row, i) => row.some((v, j) => i !== j && Math.abs(v) > 1e-10));
+  if (hasAnyCorrelation) {
+    if (isPositiveDefinite(fullCorrMatrix)) {
+      const columns = icParams.map(p => allSamples[p.rIdx][p.name]);
+      const reordered = imanConover(columns, fullCorrMatrix);
+      for (let k = 0; k < icParams.length; k++) {
+        allSamples[icParams[k].rIdx][icParams[k].name] = reordered[k];
+      }
+    } else {
+      const warn = document.getElementById('interResCorrWarn');
+      if (warn) { warn.textContent = '⚠ Combined correlation matrix is not positive definite. Running without correlations.'; warn.style.color = '#B91C1C'; }
     }
   }
 
@@ -2127,19 +2212,6 @@ function runMultiReservoirSimulation() {
       rfType: cfg.rfType, rfRaw: cfg.rfRaw, rfPerc: cfg.rfPerc,
       samples: allSamples[rIdx]
     });
-  }
-
-  // Phase 4b: Apply inter-reservoir Iman-Conover (volume-level)
-  const irCorr = readInterReservoirCorrMatrix();
-  if (irCorr && perReservoir.length >= 2) {
-    const primCols = perReservoir.map(r => r.primary);
-    const recCols = perReservoir.map(r => r.rec);
-    const reorderedPrim = imanConover(primCols, irCorr);
-    const reorderedRec = imanConover(recCols, irCorr);
-    for (let rIdx = 0; rIdx < perReservoir.length; rIdx++) {
-      perReservoir[rIdx].primary = reorderedPrim[rIdx];
-      perReservoir[rIdx].rec = reorderedRec[rIdx];
-    }
   }
 
   // Phase 5: Aggregate (sum in common units)
@@ -2400,7 +2472,7 @@ if (reservoirNameInput) {
     if (reservoirs[activeReservoirIdx]) {
       reservoirs[activeReservoirIdx].name = reservoirNameInput.value;
       renderReservoirTabs();
-      buildInterReservoirCorrMatrix();
+      buildCrossReservoirCorrTable();
     }
   });
 }
