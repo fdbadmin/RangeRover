@@ -899,32 +899,33 @@ function mountParams() {
     refresh();
   });
 
-  // RF labels switch
-  const rfSel = document.querySelector('.rf-type');
-  const rfWeights = document.getElementById('rf-weights');
-  const rfLabs = [document.querySelector('.rf-l0'), document.querySelector('.rf-l1'), document.querySelector('.rf-l2')];
-  function rfRefresh() {
-    const L = DIST_LABELS[rfSel.value];
-    const rfInputs = [...document.querySelectorAll('.rf-v')];
-    rfLabs.forEach((lab, i) => {
-      lab.textContent = L[i];
-      const ignore = L[i].includes('(ignore)');
-      lab.classList.toggle('disabled', ignore);
-      const fieldDiv = lab.closest('.field');
-      if (ignore) { rfInputs[i].disabled = true; rfInputs[i].value = ''; fieldDiv && fieldDiv.classList.add('hidden-field'); }
-      else { rfInputs[i].disabled = false; fieldDiv && fieldDiv.classList.remove('hidden-field'); }
-    });
-    if (rfSel.value === 'Discrete') { rfWeights.classList.remove('hidden'); rfWeights.classList.add('show-sep'); }
-    else { rfWeights.classList.add('hidden'); rfWeights.classList.remove('show-sep'); }
-    renderDistPreviewsDebounced();
-  }
-  rfSel.addEventListener('change', rfRefresh);
-  rfWeights.querySelectorAll('input').forEach(w => w.addEventListener('input', renderDistPreviewsDebounced));
-  document.querySelectorAll('.rf-v').forEach(inp => inp.addEventListener('input', renderDistPreviewsDebounced));
   rfRefresh();
   labelsAndFormula();
   renderDistPreviewsDebounced();
 }
+
+// RF event listeners — set up once (outside mountParams to avoid stacking)
+const _rfSel = document.querySelector('.rf-type');
+const _rfWeights = document.getElementById('rf-weights');
+const _rfLabs = [document.querySelector('.rf-l0'), document.querySelector('.rf-l1'), document.querySelector('.rf-l2')];
+function rfRefresh() {
+  const L = DIST_LABELS[_rfSel.value];
+  const rfInputs = [...document.querySelectorAll('.rf-v')];
+  _rfLabs.forEach((lab, i) => {
+    lab.textContent = L[i];
+    const ignore = L[i].includes('(ignore)');
+    lab.classList.toggle('disabled', ignore);
+    const fieldDiv = lab.closest('.field');
+    if (ignore) { rfInputs[i].disabled = true; rfInputs[i].value = ''; fieldDiv && fieldDiv.classList.add('hidden-field'); }
+    else { rfInputs[i].disabled = false; fieldDiv && fieldDiv.classList.remove('hidden-field'); }
+  });
+  if (_rfSel.value === 'Discrete') { _rfWeights.classList.remove('hidden'); _rfWeights.classList.add('show-sep'); }
+  else { _rfWeights.classList.add('hidden'); _rfWeights.classList.remove('show-sep'); }
+  renderDistPreviewsDebounced();
+}
+_rfSel.addEventListener('change', rfRefresh);
+_rfWeights.querySelectorAll('input').forEach(w => w.addEventListener('input', renderDistPreviewsDebounced));
+document.querySelectorAll('.rf-v').forEach(inp => inp.addEventListener('input', renderDistPreviewsDebounced));
 
 function labelsForUI() { return labelsFor(FLUID.value); }
 function labelsAndFormula() {
@@ -1252,6 +1253,7 @@ function addReservoir() {
 
 function removeReservoir(idx) {
   if (reservoirs.length <= 1) return;
+  saveReservoirToState();
   saveCrossReservoirCorr();
   // Re-key cross-reservoir correlations after removal
   const newCorr = {};
@@ -1283,6 +1285,8 @@ function toggleAdvancedMode(enabled) {
       reservoirs.push(createDefaultReservoirState(0));
       activeReservoirIdx = 0;
       saveReservoirToState();
+    } else {
+      saveReservoirToState();
     }
     renderReservoirTabs();
     buildCorrelationMatrix();
@@ -1290,8 +1294,9 @@ function toggleAdvancedMode(enabled) {
     updateResultsViewSelector();
     buildCrossReservoirCorrTable();
   } else {
-    // Switching back to basic: load reservoir 0 if it exists
+    // Switching back to basic: save current state, then load reservoir 0
     if (reservoirs.length > 0) {
+      saveReservoirToState();
       activeReservoirIdx = 0;
       loadReservoirFromState(0);
     }
