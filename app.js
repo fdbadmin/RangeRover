@@ -14,6 +14,7 @@ let advancedMode = false;
 let reservoirs = [];       // array of reservoir config objects
 let activeReservoirIdx = 0;
 let lastMultiResults = null;  // stored multi-reservoir results
+let _loadingReservoir = false; // guard: prevent saves during reservoir load
 
 /* ===== 2. UNITS ===== */
 const AREA_FACTORS = { m2: 0.000247105, km2: 247.105, acres: 1.0, ft2: 2.2957e-5 };
@@ -766,6 +767,7 @@ function downloadCSV(filename, content) {
 function generateSummaryCSV() {
   if (!lastSimulationData) return;
   const { P90, P50, P10, RP90, RP50, RP10, detMidCase, detRecMidCase, pValMain, pValRec, labelSet } = lastSimulationData;
+  const fluidDisplayName = { oil: 'Oil', gas: 'Gas', csg: 'Coal Seam Gas', oilgas: 'Oil + Solution Gas', gasvo: 'Gas + Vaporized Oil' };
   let csv = `RangeRover Summary Report\n`;
   csv += `Metric,${labelSet.primary}\nUnit,${labelSet.unit}\n\n`;
   csv += `In-Place Volume\nStatistic,Value (${labelSet.unit})\n`;
@@ -777,10 +779,21 @@ function generateSummaryCSV() {
 
   // Multi-reservoir summary
   if (advancedMode && lastMultiResults) {
-    csv += `\nPer-Reservoir Summary\nReservoir,Fluid,Unit,P90,P50,P10,Det Mid Case\n`;
+    csv += `\nPer-Reservoir Summary\n`;
+    csv += `Reservoir,Fluid,Unit,In-Place P90,In-Place P50,In-Place P10,In-Place Det Mid Case,Recoverable P90,Recoverable P50,Recoverable P10,Recoverable Det Mid Case\n`;
     for (const r of lastMultiResults.perReservoir) {
       const [rP90, rP50, rP10] = computeQuantiles(r.primary);
-      csv += `${r.name},${r.fluid},${r.labelSet.unit},${rP90.toFixed(2)},${rP50.toFixed(2)},${rP10.toFixed(2)},${r.detMidCase.toFixed(2)}\n`;
+      const [rrP90, rrP50, rrP10] = computeQuantiles(r.rec);
+      const fname = fluidDisplayName[r.fluid] || r.fluid;
+      csv += `${r.name},${fname},${r.labelSet.unit},${rP90.toFixed(2)},${rP50.toFixed(2)},${rP10.toFixed(2)},${r.detMidCase.toFixed(2)},${rrP90.toFixed(2)},${rrP50.toFixed(2)},${rrP10.toFixed(2)},${r.detRecMidCase.toFixed(2)}\n`;
+      // Sub-component breakdown for dual-phase fluids
+      if (r.subComponents && r.subComponents.length > 0) {
+        for (const sc of r.subComponents) {
+          const [scP90, scP50, scP10] = computeQuantiles(sc.inPlace);
+          const [scrP90, scrP50, scrP10] = computeQuantiles(sc.recoverable);
+          csv += `  ${sc.label} (${r.name}),${fname},${sc.unit},${scP90.toFixed(2)},${scP50.toFixed(2)},${scP10.toFixed(2)},,${scrP90.toFixed(2)},${scrP50.toFixed(2)},${scrP10.toFixed(2)},\n`;
+        }
+      }
     }
   }
   downloadCSV('rangerover_summary.csv', csv);
@@ -996,6 +1009,7 @@ function rebuildFluidUI() {
 }
 
 function updateFluidUI() {
+  if (_loadingReservoir) return;
   if (advancedMode) saveReservoirToState();
   rebuildFluidUI();
   prefillDefaults();
@@ -1140,6 +1154,7 @@ function createDefaultReservoirState(idx) {
 }
 
 function saveReservoirToState() {
+  if (_loadingReservoir) return;
   const r = reservoirs[activeReservoirIdx];
   if (!r) return;
   r.fluid = FLUID.value;
@@ -1168,6 +1183,8 @@ function saveReservoirToState() {
 function loadReservoirFromState(idx) {
   const r = reservoirs[idx];
   if (!r) return;
+  _loadingReservoir = true;
+  try {
   activeReservoirIdx = idx;
   FLUID.value = r.fluid;
   rebuildFluidUI();
@@ -1216,6 +1233,7 @@ function loadReservoirFromState(idx) {
   buildCorrelationMatrix();
   buildSharedLinksUI();
   renderDistPreviewsDebounced();
+  } finally { _loadingReservoir = false; }
 }
 
 function renderReservoirTabs() {
@@ -1860,6 +1878,7 @@ function buildMultiSamplesData(perReservoir, iters) {
 
 /* ===== 24. MAIN SIMULATION ENTRY POINT ===== */
 function runSimulation() {
+  if (_loadingReservoir) return;
   if (advancedMode && reservoirs.length > 0) {
     runMultiReservoirSimulation();
     return;
