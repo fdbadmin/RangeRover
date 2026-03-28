@@ -764,6 +764,191 @@ function downloadCSV(filename, content) {
   document.body.removeChild(link);
 }
 
+/* ===== PROJECT SAVE / LOAD ===== */
+function serializeProject() {
+  // Flush current DOM state into the reservoirs array
+  if (advancedMode && reservoirs.length > 0) saveReservoirToState();
+
+  const project = {
+    version: 1,
+    advancedMode,
+    activeReservoirIdx,
+    settings: {
+      fluid: document.getElementById('fluid').value,
+      iterations: document.getElementById('iterations').value,
+      seed: document.getElementById('seed').value,
+      nbins: document.getElementById('nbins').value,
+      areaUnit: document.getElementById('areaUnit').value,
+      thicknessUnit: document.getElementById('thicknessUnit').value,
+      geometryMode: geometryMode(),
+      grvUnit: (function() { const el = document.getElementById('grvUnit'); return el ? el.value : null; })()
+    },
+    reservoirs: reservoirs.map(r => ({
+      id: r.id,
+      name: r.name,
+      fluid: r.fluid,
+      dists: r.dists.map(d => ({ name: d.name, type: d.type, raw: d.raw, wPerc: d.wPerc })),
+      rfType: r.rfType,
+      rfRaw: r.rfRaw,
+      rfPerc: r.rfPerc,
+      correlationMatrix: r.correlationMatrix,
+      sharedLinks: r.sharedLinks
+    })),
+    crossReservoirCorr
+  };
+
+  // In basic mode, capture the DOM state as a single reservoir
+  if (!advancedMode) {
+    const fluid = document.getElementById('fluid').value;
+    const rows = [...document.querySelectorAll('#params .dist-row')];
+    const dists = rows.map(row => {
+      const name = row.getAttribute('data-param');
+      const type = row.querySelector('.dist-type').value;
+      const raw = [...row.querySelectorAll('input.v')].map(el => el.value === '' ? NaN : Number(el.value));
+      let wPerc = [NaN, NaN, NaN];
+      const wrow = row.nextElementSibling;
+      if (type === 'Discrete' && wrow && wrow.classList.contains('weights-row'))
+        wPerc = [...wrow.querySelectorAll('input')].map(x => Number(x.value));
+      return { name, type, raw, wPerc };
+    });
+    const rfType = document.querySelector('.rf-type').value;
+    const rfRaw = [...document.querySelectorAll('.rf-v')].map(x => x.value === '' ? NaN : Number(x.value));
+    let rfPerc = [NaN, NaN, NaN];
+    if (rfType === 'Discrete') rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x => Number(x.value));
+    project.reservoirs = [{ id: 0, name: 'Reservoir 1', fluid, dists, rfType, rfRaw, rfPerc, correlationMatrix: readCorrelationMatrix(), sharedLinks: readSharedLinks() }];
+  }
+
+  return project;
+}
+
+function deserializeProject(project) {
+  if (!project || project.version == null) { alert('Invalid project file.'); return; }
+
+  _loadingReservoir = true;
+  try {
+    // Restore settings
+    const s = project.settings || {};
+    if (s.fluid) document.getElementById('fluid').value = s.fluid;
+    if (s.iterations) document.getElementById('iterations').value = s.iterations;
+    if (s.seed) document.getElementById('seed').value = s.seed;
+    if (s.nbins) document.getElementById('nbins').value = s.nbins;
+    if (s.areaUnit) document.getElementById('areaUnit').value = s.areaUnit;
+    if (s.thicknessUnit) document.getElementById('thicknessUnit').value = s.thicknessUnit;
+
+    // Geometry mode
+    if (s.geometryMode) {
+      const gmSel = document.getElementById('geometryMode');
+      if (gmSel) gmSel.value = s.geometryMode;
+    }
+
+    // Rebuild fluid UI for the loaded fluid type
+    rebuildFluidUI();
+
+    // GRV unit (must set after rebuildFluidUI creates the element)
+    if (s.grvUnit) {
+      const guSel = document.getElementById('grvUnit');
+      if (guSel) guSel.value = s.grvUnit;
+    }
+
+    // Restore reservoirs
+    reservoirs = (project.reservoirs || []).map((r, i) => ({
+      id: r.id != null ? r.id : i,
+      name: r.name || `Reservoir ${i + 1}`,
+      fluid: r.fluid || 'oil',
+      dists: (r.dists || []).map(d => ({
+        name: d.name, type: d.type, raw: d.raw,
+        v: convTriplet(d.name, d.raw),
+        wPerc: d.wPerc || [NaN, NaN, NaN]
+      })),
+      rfType: r.rfType || 'Triangular',
+      rfRaw: r.rfRaw || [NaN, NaN, NaN],
+      rfPerc: r.rfPerc || [NaN, NaN, NaN],
+      correlationMatrix: r.correlationMatrix || null,
+      sharedLinks: r.sharedLinks || {}
+    }));
+
+    crossReservoirCorr = project.crossReservoirCorr || {};
+
+    // Restore advanced mode state
+    const advToggle = document.getElementById('advancedModeToggle');
+    if (project.advancedMode) {
+      advancedMode = true;
+      if (advToggle) advToggle.checked = true;
+      const advSections = document.querySelectorAll('.adv-section');
+      advSections.forEach(el => { el.classList.toggle('show', true); });
+      activeReservoirIdx = Math.min(project.activeReservoirIdx || 0, reservoirs.length - 1);
+    } else {
+      advancedMode = false;
+      if (advToggle) advToggle.checked = false;
+      const advSections = document.querySelectorAll('.adv-section');
+      advSections.forEach(el => { el.classList.toggle('show', false); });
+      activeReservoirIdx = 0;
+    }
+  } finally {
+    _loadingReservoir = false;
+  }
+
+  // Load the active reservoir into the UI (outside the guard so events fire normally)
+  if (reservoirs.length > 0) {
+    loadReservoirFromState(activeReservoirIdx);
+  }
+
+  // Rebuild advanced mode UI elements
+  if (advancedMode) {
+    renderReservoirTabs();
+    buildCorrelationMatrix();
+    buildSharedLinksUI();
+    updateResultsViewSelector();
+    buildCrossReservoirCorrTable();
+  }
+
+  // Clear any previous results
+  lastSimulationData = null;
+  lastMultiResults = null;
+  document.getElementById('downloadCsv').disabled = true;
+  document.getElementById('downloadSamples').disabled = true;
+  const summaryBody = document.getElementById('summaryBody');
+  if (summaryBody) summaryBody.innerHTML = '';
+  ['chart', 'chartRec'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+
+  labelsAndFormula();
+  renderDistPreviews();
+}
+
+function saveProjectToFile() {
+  const project = serializeProject();
+  const json = JSON.stringify(project, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'project.rrp';
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function loadProjectFromFile() {
+  const input = document.getElementById('projectFileInput');
+  input.value = ''; // reset so same file can be re-selected
+  input.click();
+}
+
+function handleProjectFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const project = JSON.parse(ev.target.result);
+      deserializeProject(project);
+    } catch (err) {
+      alert('Could not read project file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
 function generateSummaryCSV() {
   if (!lastSimulationData) return;
   const { P90, P50, P10, RP90, RP50, RP10, detMidCase, detRecMidCase, pValMain, pValRec, labelSet } = lastSimulationData;
@@ -2000,6 +2185,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && helpModa
 // CSV buttons
 document.getElementById('downloadCsv').addEventListener('click', generateSummaryCSV);
 document.getElementById('downloadSamples').addEventListener('click', generateSamplesCSV);
+
+// Project save/load
+document.getElementById('saveProject').addEventListener('click', saveProjectToFile);
+document.getElementById('openProject').addEventListener('click', loadProjectFromFile);
+document.getElementById('projectFileInput').addEventListener('change', handleProjectFileSelect);
 
 // Advanced mode toggle
 const advToggle = document.getElementById('advancedModeToggle');
