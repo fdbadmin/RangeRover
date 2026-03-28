@@ -457,6 +457,38 @@ function computeDetMidCase(dists, rfType, rfRaw, rfPerc, fluid, metric, useGRV) 
   return { detMidCase, detRecMidCase };
 }
 
+function computeSubComponents(fluid, samples, dists, useGRV, rfType, rfRaw, rfPerc) {
+  if (fluid !== 'oilgas' && fluid !== 'gasvo') return null;
+  const n = samples['Recovery Factor'].length;
+  const RF = samples['Recovery Factor'];
+  const metrics = fluid === 'oilgas' ? ['stoiip', 'giip', 'total'] : ['giip', 'vo', 'total'];
+  const labels = fluid === 'oilgas'
+    ? { stoiip: 'STOIIP (MMBO)', giip: 'Solution Gas (BCF)', total: 'Total (MMBOE)' }
+    : { giip: 'GIIP (BCF)', vo: 'Vaporized Oil (MMBO)', total: 'Total (MMBOE)' };
+  const recLabels = fluid === 'oilgas'
+    ? { stoiip: 'Rec. STOIIP (MMBO)', giip: 'Rec. Solution Gas (BCF)', total: 'Rec. Total (MMBOE)' }
+    : { giip: 'Rec. GIIP (BCF)', vo: 'Rec. Vaporized Oil (MMBO)', total: 'Rec. Total (MMBOE)' };
+  const rows = [];
+  const detParams = {};
+  for (const d of dists) detParams[d.name] = mostLikely(d.type, d.v, d.wPerc);
+  const hasGRV = dists.some(d => d.name === 'GRV');
+  const detAH = hasGRV ? detParams['GRV'] : ((detParams['Area'] || 0) * (detParams['Thickness'] || 0));
+  const detRF = mostLikely(rfType, rfRaw, rfPerc);
+  for (const m of metrics) {
+    const arr = new Float64Array(n);
+    const recArr = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const AH = useGRV ? samples['GRV'][i] : (samples['Area'][i] * samples['Thickness'][i]);
+      const p = {}; for (const d of dists) p[d.name] = samples[d.name][i];
+      arr[i] = computeVolumeSingle(fluid, m, AH, p);
+      recArr[i] = arr[i] * RF[i];
+    }
+    const det = computeVolumeSingle(fluid, m, detAH, detParams);
+    rows.push({ metric: m, label: labels[m], recLabel: recLabels[m], data: arr, recData: recArr, det, detRec: det * detRF });
+  }
+  return rows;
+}
+
 /* ===== 13. DISPLAY & PLOTTING (CONSOLIDATED) ===== */
 function computeQuantiles(arr) {
   const s = Array.from(arr).filter(Number.isFinite).sort((a, b) => a - b);
@@ -473,7 +505,7 @@ function computePercentile(arr, x) {
   return idx < s.length ? (idx + 1) / s.length : 1;
 }
 
-function displayResults(primary, rec, detMidCase, detRecMidCase, labelSet, nbins) {
+function displayResults(primary, rec, detMidCase, detRecMidCase, labelSet, nbins, subComponents) {
   const fmt = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
   const [P90, P50, P10] = computeQuantiles(primary);
   const [RP90, RP50, RP10] = computeQuantiles(rec);
@@ -483,20 +515,41 @@ function displayResults(primary, rec, detMidCase, detRecMidCase, labelSet, nbins
   const pDetRec = computePercentile(rec, detRecMidCase);
   const pValRec = Number.isFinite(pDetRec) ? Math.max(0, Math.min(100, Math.round((1 - pDetRec) * 100))) : NaN;
 
-  // Update header & table
+  // Update header
   document.getElementById('results-title').innerHTML = `Results (${labelSet.unit}) <span class="chip">P90 / P50 / P10</span>`;
-  document.getElementById('metric-name').textContent = labelSet.primary;
-  document.getElementById('metric-name-rec').textContent = labelSet.metricRec;
   document.getElementById('formula-note').innerHTML = labelSet.formula;
 
-  document.querySelector('.s-p90').textContent = fmt(P90);
-  document.querySelector('.s-p50').textContent = fmt(P50);
-  document.querySelector('.s-p10').textContent = fmt(P10);
-  document.querySelector('.s-mid').textContent = Number.isFinite(pValMain) ? `${fmt(detMidCase)} (P${pValMain})` : fmt(detMidCase);
-  document.querySelector('.r-p90').textContent = fmt(RP90);
-  document.querySelector('.r-p50').textContent = fmt(RP50);
-  document.querySelector('.r-p10').textContent = fmt(RP10);
-  document.querySelector('.r-mid').textContent = Number.isFinite(pValRec) ? `${fmt(detRecMidCase)} (P${pValRec})` : fmt(detRecMidCase);
+  // Build summary table body
+  const tbody = document.getElementById('summaryBody');
+  tbody.innerHTML = '';
+  function addRow(label, p90, p50, p10, mid, cls) {
+    const tr = document.createElement('tr');
+    if (cls) tr.className = cls;
+    tr.innerHTML = `<td>${label}</td><td>${fmt(p90)}</td><td>${fmt(p50)}</td><td>${fmt(p10)}</td><td>${mid}</td>`;
+    tbody.appendChild(tr);
+  }
+  const fmtDet = (val, pVal) => Number.isFinite(pVal) ? `${fmt(val)} (P${pVal})` : fmt(val);
+
+  // In-place row
+  addRow(labelSet.primary, P90, P50, P10, fmtDet(detMidCase, pValMain));
+  // Sub-component breakdown (in-place)
+  if (subComponents) {
+    for (const sc of subComponents) {
+      if (sc.metric === 'total') continue; // already the main row
+      const [sp90, sp50, sp10] = computeQuantiles(sc.data);
+      addRow(sc.label, sp90, sp50, sp10, fmt(sc.det), 'sub-row');
+    }
+  }
+  // Recoverable row
+  addRow(labelSet.metricRec, RP90, RP50, RP10, fmtDet(detRecMidCase, pValRec));
+  // Sub-component breakdown (recoverable)
+  if (subComponents) {
+    for (const sc of subComponents) {
+      if (sc.metric === 'total') continue;
+      const [sp90, sp50, sp10] = computeQuantiles(sc.recData);
+      addRow(sc.recLabel, sp90, sp50, sp10, fmt(sc.detRec), 'sub-row');
+    }
+  }
 
   // Plots
   const config = { displayModeBar: true, responsive: true, toImageButtonOptions: { format: 'png', filename: 'rangerover', width: 1600, height: 1000, scale: 3 } };
@@ -1647,12 +1700,13 @@ function runMultiReservoirSimulation() {
     const { primary, rec } = computeReservoirVolumes(cfg.fluid, cfg.metric, allSamples[rIdx], cfg.dists, cfg.useGRV);
     const { detMidCase, detRecMidCase } = computeDetMidCase(cfg.dists, cfg.rfType, cfg.rfRaw, cfg.rfPerc, cfg.fluid, cfg.metric, cfg.useGRV);
     const labelSet = labelsForFluidMetric(cfg.fluid, cfg.metric);
+    const subComp = computeSubComponents(cfg.fluid, allSamples[rIdx], cfg.dists, cfg.useGRV, cfg.rfType, cfg.rfRaw, cfg.rfPerc);
     perReservoir.push({
       name: reservoirs[rIdx].name || `Reservoir ${rIdx + 1}`,
       fluid: cfg.fluid, metric: cfg.metric, primary, rec,
       detMidCase, detRecMidCase, labelSet, dists: cfg.dists,
       rfType: cfg.rfType, rfRaw: cfg.rfRaw, rfPerc: cfg.rfPerc,
-      samples: allSamples[rIdx]
+      samples: allSamples[rIdx], subComponents: subComp
     });
   }
 
@@ -1728,7 +1782,7 @@ function displayMultiReservoirView(view, nbins) {
     const idx = parseInt(view);
     if (idx >= 0 && idx < perReservoir.length) {
       const r = perReservoir[idx];
-      displayResults(r.primary, r.rec, r.detMidCase, r.detRecMidCase, r.labelSet, nbins);
+      displayResults(r.primary, r.rec, r.detMidCase, r.detRecMidCase, r.labelSet, nbins, r.subComponents);
     }
   }
 }
@@ -1738,19 +1792,31 @@ function displayMultiSummaryTable() {
   if (!tbody || !lastMultiResults) return;
   tbody.innerHTML = '';
   const fmt = x => (Math.abs(x) >= 100) ? formatWithCommas(x, 0) : formatWithCommas(x, 2);
+  const fluidLabels = { oil: 'Oil', gas: 'Gas', csg: 'CSG', oilgas: 'Oil + Gas', gasvo: 'Gas + VO' };
 
   for (const r of lastMultiResults.perReservoir) {
     const [P90, P50, P10] = computeQuantiles(r.primary);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.name}</td><td>${r.fluid}</td><td>${fmt(P90)}</td><td>${fmt(P50)}</td><td>${fmt(P10)}</td><td>${fmt(r.detMidCase)}</td><td>${r.labelSet.unit}</td>`;
+    tr.innerHTML = `<td>${r.name}</td><td>${fluidLabels[r.fluid] || r.fluid}</td><td>${fmt(P90)}</td><td>${fmt(P50)}</td><td>${fmt(P10)}</td><td>${fmt(r.detMidCase)}</td><td>${r.labelSet.unit}</td>`;
     tbody.appendChild(tr);
+    // Sub-component rows for dual-phase fluids
+    if (r.subComponents) {
+      for (const sc of r.subComponents) {
+        if (sc.metric === 'total') continue;
+        const [sp90, sp50, sp10] = computeQuantiles(sc.data);
+        const subTr = document.createElement('tr');
+        subTr.className = 'sub-row';
+        subTr.innerHTML = `<td>${sc.label}</td><td></td><td>${fmt(sp90)}</td><td>${fmt(sp50)}</td><td>${fmt(sp10)}</td><td>${fmt(sc.det)}</td><td></td>`;
+        tbody.appendChild(subTr);
+      }
+    }
   }
 
   // Total row
   const [tP90, tP50, tP10] = computeQuantiles(lastMultiResults.totalPrimary);
   const totalTr = document.createElement('tr');
   totalTr.className = 'total-row';
-  totalTr.innerHTML = `<td><b>TOTAL</b></td><td>—</td><td>${fmt(tP90)}</td><td>${fmt(tP50)}</td><td>${fmt(tP10)}</td><td>${fmt(lastMultiResults.totalDet)}</td><td>${lastMultiResults.totalUnit}</td>`;
+  totalTr.innerHTML = `<td><b>TOTAL</b></td><td>\u2014</td><td>${fmt(tP90)}</td><td>${fmt(tP50)}</td><td>${fmt(tP10)}</td><td>${fmt(lastMultiResults.totalDet)}</td><td>${lastMultiResults.totalUnit}</td>`;
   tbody.appendChild(totalTr);
 }
 
@@ -1836,8 +1902,11 @@ function runSimulation() {
   const { detMidCase, detRecMidCase } = computeDetMidCase(dists, rfType, rfRaw, rfPerc, fluid, metric, useGRV);
   const labelSet = labelsForFluidMetric(fluid, metric);
 
+  // Sub-components for dual-phase fluids
+  const subComponents = computeSubComponents(fluid, samples, dists, useGRV, rfType, rfRaw, rfPerc);
+
   // Display
-  const stats = displayResults(primary, rec, detMidCase, detRecMidCase, labelSet, nbins);
+  const stats = displayResults(primary, rec, detMidCase, detRecMidCase, labelSet, nbins, subComponents);
 
   // Tornado
   const tornadoData = tornadoBars(dists, rfType, rfRaw, rfPerc, fluid, metric);

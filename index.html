@@ -225,6 +225,9 @@
   .multi-summary-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}
   .multi-summary-table th,.multi-summary-table td{padding:8px;border-bottom:1px solid var(--border);text-align:left}
   .multi-summary-table .total-row{font-weight:700;background:#FFFDE7}
+  .multi-summary-table .sub-row td{font-size:12px;color:#555;padding:4px 8px 4px 24px}
+  .sub-row td{font-size:12px;color:#555;padding:6px 10px 6px 24px;border-bottom:1px solid #f0f0f0}
+  .sub-row td:first-child{font-style:italic}
   .results-view-bar{display:flex;gap:8px;align-items:center;margin:8px 0}
   .results-view-bar select{padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px}
   .preset-btns{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap}
@@ -408,7 +411,7 @@
       <div class="summary-wrap">
         <table id="summary">
           <thead><tr><th>Metric</th><th>P90</th><th>P50</th><th>P10</th><th>Deterministic Mid Case</th></tr></thead>
-          <tbody>
+          <tbody id="summaryBody">
             <tr><td id="metric-name">STOIIP</td><td class="s-p90 muted">—</td><td class="s-p50 muted">—</td><td class="s-p10 muted">—</td><td class="s-mid muted">—</td></tr>
             <tr><td id="metric-name-rec">Recoverable STOIIP</td><td class="r-p90 muted">—</td><td class="r-p50 muted">—</td><td class="r-p10 muted">—</td><td class="r-mid muted">—</td></tr>
           </tbody>
