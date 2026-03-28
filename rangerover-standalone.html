@@ -93,7 +93,7 @@
   }
 
   .summary-wrap{max-width:840px}
-  table{width:100%;border-collapse:collapse}
+  table{border-collapse:collapse}
   th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
   th{font-weight:700}
   .muted{color:var(--muted)}
@@ -232,8 +232,9 @@
   .corr-warn{color:#B91C1C;font-size:12px;font-weight:600;margin:4px 0}
   .shared-link{display:grid;grid-template-columns:160px 1fr;gap:6px 12px;align-items:center;font-size:13px;margin:4px 0}
   .shared-link select{padding:6px 8px;font-size:13px;border-radius:6px;border:1px solid var(--border)}
-  .multi-summary-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}
-  .multi-summary-table th,.multi-summary-table td{padding:8px;border-bottom:1px solid var(--border);text-align:left}
+  .multi-summary-table{max-width:840px;border-collapse:collapse;margin:8px 0;font-size:13px}
+  .multi-summary-table th,.multi-summary-table td{padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+  .multi-summary-table th:first-child,.multi-summary-table td:first-child,.multi-summary-table th:nth-child(2),.multi-summary-table td:nth-child(2),.multi-summary-table th:last-child,.multi-summary-table td:last-child{text-align:left}
   .multi-summary-table .total-row{font-weight:700;background:#FFFDE7}
   .multi-summary-table .sub-row td{font-size:12px;color:#555;padding:4px 8px}
   .sub-row td{font-size:12px;color:#555;padding:6px 10px;border-bottom:1px solid #f0f0f0}
@@ -437,14 +438,14 @@
       <!-- Advanced: Multi-reservoir summary table -->
       <div class="adv-section" id="multiSummarySection">
         <table id="multiSummary" class="multi-summary-table">
-          <thead><tr><th>Reservoir</th><th>Fluid</th><th>P90</th><th>P50</th><th>P10</th><th>Det. Mid</th><th>Unit</th></tr></thead>
+          <thead><tr><th>Reservoir</th><th>Fluid</th><th>P90</th><th>P50</th><th>P10</th><th>Det.&nbsp;Mid</th><th>Unit</th></tr></thead>
           <tbody id="multiSummaryBody"></tbody>
         </table>
       </div>
 
       <div class="summary-wrap">
         <table id="summary">
-          <thead><tr><th>Metric</th><th>P90</th><th>P50</th><th>P10</th><th>Deterministic Mid Case</th></tr></thead>
+          <thead><tr><th>Metric</th><th>P90</th><th>P50</th><th>P10</th><th>Det.&nbsp;Mid&nbsp;Case</th></tr></thead>
           <tbody id="summaryBody">
             <tr><td id="metric-name">STOIIP</td><td class="s-p90 muted">—</td><td class="s-p50 muted">—</td><td class="s-p10 muted">—</td><td class="s-mid muted">—</td></tr>
             <tr><td id="metric-name-rec">Recoverable STOIIP</td><td class="r-p90 muted">—</td><td class="r-p50 muted">—</td><td class="r-p10 muted">—</td><td class="r-mid muted">—</td></tr>
@@ -701,7 +702,6 @@
 </div>
 
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
-<script src="app.js"></script>
 <script>
 /* =================================================================
    RangeRover — app.js
@@ -2930,5 +2930,6 @@ labelsAndFormula();
 prefillDefaults();
 renderDistPreviews();
 </script>
+</body>
 </html>
 
