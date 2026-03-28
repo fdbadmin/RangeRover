@@ -984,15 +984,21 @@ function mountGeometrySelector() {
   toggleGRVUnits();
 }
 
-function updateFluidUI() {
+/* rebuildFluidUI: rebuild UI elements without filling defaults */
+function rebuildFluidUI() {
   mountGeometrySelector();
   PARAMS = paramsFor(FLUID.value);
   mountParams();
   labelsAndFormula();
-  prefillDefaults();
   mountResultsTypeSelector();
   renderDistPreviewsDebounced();
   if (advancedMode) buildCorrelationMatrix();
+}
+
+function updateFluidUI() {
+  if (advancedMode) saveReservoirToState();
+  rebuildFluidUI();
+  prefillDefaults();
 }
 FLUID.addEventListener('change', updateFluidUI);
 
@@ -1162,28 +1168,37 @@ function saveReservoirToState() {
 function loadReservoirFromState(idx) {
   const r = reservoirs[idx];
   if (!r) return;
+  activeReservoirIdx = idx;
   FLUID.value = r.fluid;
-  updateFluidUI();
-  const rows = [...document.querySelectorAll('#params .dist-row')];
-  for (const row of rows) {
-    const name = row.getAttribute('data-param');
-    const saved = r.dists.find(d => d.name === name);
-    if (!saved) continue;
-    const sel = row.querySelector('.dist-type'); sel.value = saved.type; sel.dispatchEvent(new Event('change'));
-    const inputs = [...row.querySelectorAll('input.v')];
-    inputs[0].value = Number.isFinite(saved.raw[0]) ? saved.raw[0] : '';
-    inputs[1].value = Number.isFinite(saved.raw[1]) ? saved.raw[1] : '';
-    inputs[2].value = Number.isFinite(saved.raw[2]) ? saved.raw[2] : '';
-    if (saved.type === 'Discrete') {
-      const wrow = row.nextElementSibling;
-      if (wrow && wrow.classList.contains('weights-row')) {
-        const ws = wrow.querySelectorAll('input');
-        ws[0].value = Number.isFinite(saved.wPerc[0]) ? saved.wPerc[0] : '';
-        ws[1].value = Number.isFinite(saved.wPerc[1]) ? saved.wPerc[1] : '';
-        ws[2].value = Number.isFinite(saved.wPerc[2]) ? saved.wPerc[2] : '';
+  rebuildFluidUI();
+
+  if (r.dists.length > 0) {
+    // Restore saved parameter values
+    const rows = [...document.querySelectorAll('#params .dist-row')];
+    for (const row of rows) {
+      const name = row.getAttribute('data-param');
+      const saved = r.dists.find(d => d.name === name);
+      if (!saved) continue;
+      const sel = row.querySelector('.dist-type'); sel.value = saved.type; sel.dispatchEvent(new Event('change'));
+      const inputs = [...row.querySelectorAll('input.v')];
+      inputs[0].value = Number.isFinite(saved.raw[0]) ? saved.raw[0] : '';
+      inputs[1].value = Number.isFinite(saved.raw[1]) ? saved.raw[1] : '';
+      inputs[2].value = Number.isFinite(saved.raw[2]) ? saved.raw[2] : '';
+      if (saved.type === 'Discrete') {
+        const wrow = row.nextElementSibling;
+        if (wrow && wrow.classList.contains('weights-row')) {
+          const ws = wrow.querySelectorAll('input');
+          ws[0].value = Number.isFinite(saved.wPerc[0]) ? saved.wPerc[0] : '';
+          ws[1].value = Number.isFinite(saved.wPerc[1]) ? saved.wPerc[1] : '';
+          ws[2].value = Number.isFinite(saved.wPerc[2]) ? saved.wPerc[2] : '';
+        }
       }
     }
+  } else {
+    // New reservoir: apply defaults
+    prefillDefaults();
   }
+
   document.querySelector('.rf-type').value = r.rfType;
   document.querySelector('.rf-type').dispatchEvent(new Event('change'));
   const rfInputs = [...document.querySelectorAll('.rf-v')];
@@ -1233,7 +1248,6 @@ function renderReservoirTabs() {
 function switchReservoirTab(idx) {
   if (idx === activeReservoirIdx) return;
   saveReservoirToState();
-  activeReservoirIdx = idx;
   loadReservoirFromState(idx);
   renderReservoirTabs();
 }
@@ -1244,8 +1258,7 @@ function addReservoir() {
   saveCrossReservoirCorr();
   const newR = createDefaultReservoirState(reservoirs.length);
   reservoirs.push(newR);
-  activeReservoirIdx = reservoirs.length - 1;
-  loadReservoirFromState(activeReservoirIdx);
+  loadReservoirFromState(reservoirs.length - 1);
   renderReservoirTabs();
   updateResultsViewSelector();
   buildCrossReservoirCorrTable();
@@ -1268,8 +1281,8 @@ function removeReservoir(idx) {
   reservoirs.splice(idx, 1);
   // Re-index
   reservoirs.forEach((r, i) => r.id = i);
-  if (activeReservoirIdx >= reservoirs.length) activeReservoirIdx = reservoirs.length - 1;
-  loadReservoirFromState(activeReservoirIdx);
+  const newIdx = Math.min(activeReservoirIdx, reservoirs.length - 1);
+  loadReservoirFromState(newIdx);
   renderReservoirTabs();
   updateResultsViewSelector();
   buildCrossReservoirCorrTable();
@@ -1297,7 +1310,6 @@ function toggleAdvancedMode(enabled) {
     // Switching back to basic: save current state, then load reservoir 0
     if (reservoirs.length > 0) {
       saveReservoirToState();
-      activeReservoirIdx = 0;
       loadReservoirFromState(0);
     }
   }
