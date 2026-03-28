@@ -180,6 +180,16 @@
     letter-spacing:0.5px;
   }
 
+  /* Collapsible sections */
+  details.collapse{border-top:1px solid var(--border);margin:0;padding:0}
+  details.collapse:first-of-type{border-top:none}
+  details.collapse>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 0;list-style:none;-webkit-user-select:none;user-select:none}
+  details.collapse>summary::-webkit-details-marker{display:none}
+  details.collapse>summary::before{content:'\25B6';font-size:10px;color:var(--muted);transition:transform .15s}
+  details.collapse[open]>summary::before{transform:rotate(90deg)}
+  details.collapse>summary .subsection,details.collapse>summary .section-title{margin:0}
+  details.collapse>.collapse-body{padding:0 0 12px 0}
+
   /* Slightly soften card appearance */
   .card{
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
@@ -280,37 +290,46 @@
         </div>
       </div>
 
-      <div class="form-grid">
-        <label for="fluid">Fluid</label>
+      <details class="collapse" open>
+        <summary><h4 class="subsection">Simulation Settings</h4></summary>
+        <div class="collapse-body">
+          <div class="form-grid">
+            <label for="fluid">Fluid</label>
   <select id="fluid"><option value="oil" selected>Oil</option><option value="gas">Gas</option><option value="csg">Coal Seam Gas</option><option value="oilgas">Oil + Solution Gas</option><option value="gasvo">Gas + Vaporized Oil</option></select>
 
-        <label for="iterations">Iterations</label>
-        <input id="iterations" type="number" min="100" step="100" value="10000" />
-        <div class="note">More = smoother curves</div>
+            <label for="iterations">Iterations</label>
+            <input id="iterations" type="number" min="100" step="100" value="10000" />
+            <div class="note">More = smoother curves</div>
 
-        <label for="seed">Seed (optional)</label>
-        <input id="seed" type="text" placeholder="e.g. 42" />
-        <div class="note">Set for reproducibility</div>
+            <label for="seed">Seed (optional)</label>
+            <input id="seed" type="text" placeholder="e.g. 42" />
+            <div class="note">Set for reproducibility</div>
 
-        <label for="nbins">Histogram bins</label>
-        <input id="nbins" type="number" min="20" step="10" value="100" />
-        <div class="note">Granularity of histograms</div>
+            <label for="nbins">Histogram bins</label>
+            <input id="nbins" type="number" min="20" step="10" value="100" />
+            <div class="note">Granularity of histograms</div>
 
-        <label for="areaUnit">Area units</label>
-        <select id="areaUnit"><option value="acres">acres</option><option value="m2">m²</option><option value="km2">km²</option><option value="ft2">ft²</option></select>
-        <div class="note">Converted internally to acres</div>
+            <label for="areaUnit">Area units</label>
+            <select id="areaUnit"><option value="acres">acres</option><option value="m2">m²</option><option value="km2">km²</option><option value="ft2">ft²</option></select>
+            <div class="note">Converted internally to acres</div>
 
-        <label for="thicknessUnit">Thickness units</label>
-        <select id="thicknessUnit"><option value="ft">ft</option><option value="m">m</option></select>
-        <div class="note">Converted internally to feet</div>
-      </div>
+            <label for="thicknessUnit">Thickness units</label>
+            <select id="thicknessUnit"><option value="ft">ft</option><option value="m">m</option></select>
+            <div class="note">Converted internally to feet</div>
+          </div>
+        </div>
+      </details>
 
-      <hr class="sep"/>
-      <h4 class="subsection">Rock &amp; fluid properties</h4>
-      <div id="params"></div>
+      <details class="collapse" open>
+        <summary><h4 class="subsection">Rock &amp; Fluid Properties</h4></summary>
+        <div class="collapse-body">
+          <div id="params"></div>
+        </div>
+      </details>
 
-      <div style="margin-top:6px">
-        <h4 class="section-title">Recovery Factor <span class="chip">fraction</span></h4>
+      <details class="collapse" open>
+        <summary><h4 class="section-title">Recovery Factor <span class="chip">fraction</span></h4></summary>
+        <div class="collapse-body">
         <div class="dist-row" id="rf-row">
           <label>Distribution</label>
           <div class="field">
@@ -341,35 +360,45 @@
           <input class="rf-w w1" type="number" step="any" placeholder="e.g. 33" />
           <input class="rf-w w2" type="number" step="any" placeholder="e.g. 34" />
         </div>
-      </div>
+        </div>
+      </details>
 
       <!-- Advanced: Correlation Matrix -->
       <div class="adv-section" id="correlationSection">
-        <hr class="sep"/>
-        <h4 class="subsection">Parameter Correlations (Spearman ρ)</h4>
-        <div class="preset-btns">
-          <button onclick="applyCorrelationPreset('none')">None (Independent)</button>
-          <button onclick="applyCorrelationPreset('typical')">Typical Clastic</button>
-        </div>
-        <div id="corrMatrix" class="corr-matrix"></div>
-        <div id="corrWarn" class="corr-warn"></div>
+        <details class="collapse">
+          <summary><h4 class="subsection">Parameter Correlations (Spearman ρ)</h4></summary>
+          <div class="collapse-body">
+            <div class="preset-btns">
+              <button onclick="applyCorrelationPreset('none')">None (Independent)</button>
+              <button onclick="applyCorrelationPreset('typical')">Typical Clastic</button>
+            </div>
+            <div id="corrMatrix" class="corr-matrix"></div>
+            <div id="corrWarn" class="corr-warn"></div>
+          </div>
+        </details>
       </div>
 
       <!-- Advanced: Shared Parameter Links -->
       <div class="adv-section" id="sharedLinksSection">
-        <hr class="sep"/>
-        <h4 class="subsection">Shared Parameters</h4>
-        <p style="font-size:12px;color:var(--muted);margin:4px 0">Link parameters to use same draws as another reservoir. Shared parameters override local correlations.</p>
-        <div id="sharedLinks" class="shared-link"></div>
+        <details class="collapse">
+          <summary><h4 class="subsection">Shared Parameters</h4></summary>
+          <div class="collapse-body">
+            <p style="font-size:12px;color:var(--muted);margin:4px 0">Link parameters to use same draws as another reservoir. Shared parameters override local correlations.</p>
+            <div id="sharedLinks" class="shared-link"></div>
+          </div>
+        </details>
       </div>
 
       <!-- Advanced: Inter-Reservoir Dependencies -->
       <div class="adv-section" id="interReservoirCorrSection">
-        <hr class="sep"/>
-        <h4 class="subsection">Inter-Reservoir Parameter Correlations</h4>
-        <p class="inter-res-hint">Set Spearman ρ between the same parameter in different reservoirs (e.g. Porosity in R1 vs R2). ρ=1 means perfectly correlated draws; ρ=0 means independent. Combined with intra-reservoir correlations and applied via Iman-Conover.</p>
-        <div id="interResCorrMatrix"></div>
-        <div id="interResCorrWarn" class="corr-warn"></div>
+        <details class="collapse">
+          <summary><h4 class="subsection">Inter-Reservoir Parameter Correlations</h4></summary>
+          <div class="collapse-body">
+            <p class="inter-res-hint">Set Spearman ρ between the same parameter in different reservoirs (e.g. Porosity in R1 vs R2). ρ=1 means perfectly correlated draws; ρ=0 means independent. Combined with intra-reservoir correlations and applied via Iman-Conover.</p>
+            <div id="interResCorrMatrix"></div>
+            <div id="interResCorrWarn" class="corr-warn"></div>
+          </div>
+        </details>
       </div>
 
       <div class="btns">
@@ -384,10 +413,12 @@
         Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).
       </div>
 
-      <div class="previews">
-        <h4 class="section-title">Distribution previews <span class="chip">live</span></h4>
-        <div id="previewGrid" class="preview-grid"></div>
-      </div>
+      <details class="collapse">
+        <summary><h4 class="section-title">Distribution Previews <span class="chip">live</span></h4></summary>
+        <div class="collapse-body">
+          <div id="previewGrid" class="preview-grid"></div>
+        </div>
+      </details>
     </div>
 
     <!-- Results -->
