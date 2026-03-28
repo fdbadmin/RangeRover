@@ -473,112 +473,221 @@
 <div id="helpModal" class="modal" aria-hidden="true" role="dialog" aria-label="User Manual">
   <div class="modal-content">
     <div class="modal-head">
-      <h2>RangeRover — User Manual</h2>
+      <h2>RangeRover &#8212; User Manual</h2>
       <button class="close" id="helpClose" aria-label="Close">Close</button>
     </div>
     <div class="toc">
-      <a href="#intro">1. Introduction</a><a href="#quickstart">2. Quick start</a>
-      <a href="#inputs">3. Inputs & units</a><a href="#dists">4. Distributions</a>
-      <a href="#trunc">5. Physical truncation</a><a href="#engine">6. Monte Carlo engine</a>
-      <a href="#outputs">7. Outputs</a><a href="#tornado-help">8. Tornado sensitivity</a>
-      <a href="#csv">9. CSV export</a><a href="#tips">10. Tips</a>
-      <a href="#trouble">11. Troubleshooting</a><a href="#gloss">12. Glossary</a>
+      <a href="#intro">1. Introduction</a><a href="#quickstart">2. Quick Start</a>
+      <a href="#inputs">3. Inputs &amp; Units</a><a href="#geometry">4. Geometry Modes</a>
+      <a href="#dists">5. Distributions</a><a href="#trunc">6. Physical Truncation</a>
+      <a href="#engine">7. Monte Carlo Engine</a><a href="#outputs">8. Outputs</a>
+      <a href="#dualphase">9. Dual&#8209;Phase Fluids</a><a href="#tornado-help">10. Tornado Sensitivity</a>
+      <a href="#advanced">11. Advanced Mode</a><a href="#correlations">12. Parameter Correlations</a>
+      <a href="#shared">13. Shared Parameters</a><a href="#interres">14. Inter&#8209;Reservoir Correlations</a>
+      <a href="#previews">15. Distribution Previews</a><a href="#csv">16. CSV Export</a>
+      <a href="#tips">17. Tips</a><a href="#trouble">18. Troubleshooting</a>
+      <a href="#gloss">19. Glossary</a>
     </div>
     <div class="manual">
       <h3 id="intro">1) Introduction</h3>
-      <p><span class="hl">RangeRover</span> is a Shell‑styled probabilistic volumetric screener for <b>STOIIP</b> (oil) and <b>GIIP</b> (gas). It runs Monte Carlo simulations using user‑defined distributions (Normal, Triangular, PERT, Uniform, Known, Discrete) for the key volumetric inputs and an optional Recovery Factor, producing CDFs, histograms, a tornado sensitivity chart, and CSV exports. Oil uses Bo (RB/STB); Gas uses Bg (scf/SCF). Recovery Factor multiplies volumes directly.</p>
+      <p><span class="hl">RangeRover</span> is a probabilistic volumetric screener for hydrocarbon resources. It runs Monte Carlo simulations using user&#8209;defined distributions for key volumetric inputs, producing CDFs, histograms, tornado sensitivity charts, and CSV exports.</p>
+      <p>The tool supports five fluid types &#8212; <b>Oil</b>, <b>Gas</b>, <b>Coal Seam Gas</b>, <b>Oil + Solution Gas</b>, and <b>Gas + Vaporized Oil</b> &#8212; with an optional <b>Advanced Mode</b> for multi&#8209;reservoir analysis, inter&#8209;parameter correlations, shared parameters across reservoirs, and inter&#8209;reservoir dependencies.</p>
 
-      <h3 id="quickstart">2) Quick start</h3>
+      <h3 id="quickstart">2) Quick Start</h3>
+      <h4>Basic Mode</h4>
       <ol>
-  <li>Select <b>Fluid</b>: Oil, Gas, <b>Coal Seam Gas</b>, <b>Oil + Solution Gas</b>, or <b>Gas + Vaporized Oil</b> (units & formula update automatically).</li>
-        <li>Choose units for <b>Area</b> and <b>Thickness</b>.</li>
-        <li>For each parameter (Area, Thickness, NTG, Porosity, Water Saturation, Bo/Bg), choose a <b>Distribution</b> (Normal, Triangular, PERT, Uniform, Known, Discrete) and provide its parameters. Small labels above each box guide what to enter (e.g., Mean/Std Dev or Min/Mode/Max).</li>
-        <li>Set the <b>Recovery Factor</b> distribution if needed.</li>
-        <li>Press <b>Run Simulation</b>. Use the Reset buttons to re-zoom plots.</li>
+        <li>Select a <b>Fluid</b> type &#8212; the parameter list, formula, and units update automatically.</li>
+        <li>Choose units for <b>Area</b> and <b>Thickness</b> (or switch to <b>GRV</b> geometry mode).</li>
+        <li>For each parameter, pick a <b>Distribution</b> type and enter its values. Labels above each input box tell you what to enter (e.g., Mean / Std Dev for Normal, or Min / Mode / Max for Triangular).</li>
+        <li>Set the <b>Recovery Factor</b> distribution.</li>
+        <li>Press <b>Run Simulation</b>.</li>
+      </ol>
+      <h4>Advanced Mode</h4>
+      <ol>
+        <li>Toggle <b>Advanced Mode</b> on (top of the left panel).</li>
+        <li>Reservoir tabs appear &#8212; use <b>+ Add</b> to create additional reservoirs (up to 5).</li>
+        <li>Each reservoir has its own fluid type, parameter distributions, and recovery factor.</li>
+        <li>Optionally define <b>Parameter Correlations</b>, <b>Shared Parameters</b>, and <b>Inter&#8209;Reservoir Correlations</b>.</li>
+        <li>Press <b>Run Simulation</b> to see individual and aggregated results.</li>
       </ol>
 
-      <h3 id="inputs">3) Inputs & units</h3>
+      <h3 id="inputs">3) Inputs &amp; Units</h3>
       <ul>
-        <li><b>Area</b>: m², km², acres, ft² (internally converted to acres).</li>
+        <li><b>Area</b>: m&#178;, km&#178;, acres, or ft&#178; (internally converted to acres).</li>
         <li><b>Thickness</b>: m or ft (internally converted to ft).</li>
-        <li><b>NTG</b>, <b>Porosity</b>, <b>Water Saturation</b> are treated as <b>fractions</b> (0–1). Previews display in % for readability.</li>
-  <li><b>Bo</b> (RB/STB) for Oil; <b>Bg</b> (scf/SCF) for Gas; <b>Rs</b> (scf/bbl) with <b>Oil + Solution Gas</b>; <b>Rv</b> (bbl/scf) with <b>Gas + Vaporized Oil</b>.</li>
-  <li><b>Coal Seam Gas</b> uses <b>Coal Density</b> (g/cm³, typically 1.3–1.5) and <b>Gas Content</b> (m³/ton) instead of porosity/saturation parameters.</li>
+        <li><b>NTG</b>, <b>Porosity</b>, <b>Water Saturation</b>: fractions (0&#8211;1). Previews display as % for readability.</li>
+        <li><b>Bo</b> (RB/STB): Oil formation volume factor.</li>
+        <li><b>Bg</b> (scf/SCF): Gas formation volume factor.</li>
+        <li><b>Rs</b> (scf/bbl): Solution gas&#8211;oil ratio (Oil + Solution Gas fluid only).</li>
+        <li><b>Rv</b> (bbl/scf): Vaporized oil&#8211;gas ratio (Gas + Vaporized Oil fluid only).</li>
+        <li><b>Coal Density</b> (g/cm&#179;): Typically 1.3&#8211;1.5 (Coal Seam Gas only).</li>
+        <li><b>Gas Content</b> (m&#179;/ton): Gas adsorbed per ton of coal (Coal Seam Gas only).</li>
+        <li><b>Recovery Factor</b>: fraction (0&#8211;1). Multiplies in&#8209;place volumes to give recoverable volumes.</li>
       </ul>
 
-      <h3 id="dists">4) Distributions</h3>
-      <p><b>Supported distributions:</b> <b>Normal</b> (mean, std dev), <b>Triangular</b> (min, mode, max), <b>PERT</b> (min, mode, max), <b>Uniform</b> (min, max), <b>Known</b> (P90, P50, P10), and <b>Discrete</b> (1–3 values with optional weights).</p>
-      <div class="callout">
-        <b>Discrete flexibility:</b> you may enter <b>one</b>, <b>two</b>, or <b>three</b> values. Weights are optional. If left blank, weights auto balance (two values → 50/50; three values → ~33/33/33). Any provided weights are normalized automatically.
-      </div>
-      <div class="callout"><b>PERT:</b> Smooth alternative to Triangular using a Beta‑PERT (λ = 4). Inputs: Min, Mode, Max. Mode is used for deterministic and tornado base cases; Min/Max are used for tornado low/high. For Discrete, the deterministic mid‑case uses the highest‑weighted value (if weights are blank, values are treated as equal). The implied mean is (a + λ·m + b)/(λ+2). Sampling is truncated to physical bounds for each parameter.</div>
-
-      <h3 id="trunc">5) Physical truncation</h3>
-      <p>All random draws are constrained to physically sensible ranges:</p>
+      <h3 id="geometry">4) Geometry Modes</h3>
+      <p>RangeRover supports two geometry modes, selectable via the <b>Geometry</b> dropdown in Simulation Settings:</p>
       <ul>
-        <li>Fractions (NTG, φ, Sw, RF): 0 to 1.</li>
-        <li>Bo ≥ 1; Bg > 0; Area/Thickness > 0.</li>
-      </ul>
-      <p>Normal draws use <b>truncated sampling</b> (accept–reject) to avoid piling mass at the bounds.</p>
-
-      <h3 id="engine">6) Monte Carlo engine</h3>
-      <p>RangeRover samples each input according to its distribution and computes in-place volumes:</p>
-      <ul>
-        <li><b>Oil (STOIIP):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (Bo in RB/STB) → plots in MMBO</li>
-        <li><b>Gas (GIIP):</b> <code>43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (Bg in scf/SCF) → plots in BCF</li>
-  <li><b>Solution gas (GIIP from oil):</b> <code>7,758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF) → plots in BCF</li>
-  <li><b>Total (Oil + Solution Gas, MMBOE):</b> <code>STOIIP (MMBO) + GIIP<sub>sg</sub> (MMBOE)</code>, where <code>GIIP<sub>sg</sub> (MMBOE) = SCF / 5.8e9</code> (equivalently <code>BCF / 5.8</code>).</li>
-  <li><b>Vaporized oil from gas:</b> <code>43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB) → plots in MMBO</li>
-  <li><b>Total (Gas + Vaporized Oil, MMBOE):</b> <code>GIIP (MMBOE) + Vaporized oil (MMBO)</code>, where <code>GIIP (MMBOE) = SCF / 5.8e9</code> (equivalently <code>BCF / 5.8</code>).</li>
-      </ul>
-      <p>Recoverable volume = In-place × RF. P10/P50/P90 are computed from the empirical CDF of simulated samples. Deterministic mid-case uses the most likely input values (Normal→mean; Triangular/PERT→mode; Uniform→midpoint; Known→P50; Discrete→highest‑weighted value — equal weights if blank).</p>
-
-      <h3 id="outputs">7) Outputs</h3>
-      <ul>
-        <li><b>Results metric</b> (Oil + Solution Gas or Gas + Vaporized Oil):
-          <br>• Oil + Solution Gas: <b>STOIIP (MMBO)</b>, <b>GIIP (BCF)</b>, or <b>Total (MMBOE)</b>
-          <br>• Gas + Vaporized Oil: <b>GIIP (BCF)</b>, <b>Vaporized Oil (MMBO)</b>, or <b>Total (MMBOE)</b>
-          <br>All plots, the tornado axis, and the results table follow the selected unit.</li>
-        <li><b>In‑place & Recoverable CDFs</b> with red markers at P90/P50/P10 and a purple diamond for the deterministic mid‑case.</li>
-        <li><b>Histograms</b> with vertical markers for P90/P50/P10 and deterministic mid‑case.</li>
-        <li><b>Tornado sensitivity</b> shows impact of low/high changes in each input vs deterministic mid‑case. Green = upside, Red = downside.</li>
-        <li><b>Summary table</b> shows P90/P50/P10 and Deterministic Mid Case (with P‑value, e.g., P45).</li>
-        <li><b>CSV exports</b>: Summary CSV includes P90/P50/P10 and deterministic values. Samples CSV includes every iteration with all inputs (Area, Thickness, NtG, Porosity, Sw, Bo/Bg, RF) plus in‑place and recoverable volumes, with units.</li>
+        <li><b>Area &#215; Thickness</b> (default): separate distributions for Area and Thickness. These are multiplied together in the volumetric formula.</li>
+        <li><b>GRV</b> (Gross Rock Volume): a single GRV parameter replaces both Area and Thickness. Supported GRV units: 10&#8310; acre&#8209;ft, 10&#8313; ft&#179;, or 10&#8310; m&#179; (internally converted to acre&#8209;ft).</li>
       </ul>
 
-      <h3 id="tornado-help">8) Tornado sensitivity</h3>
-  <p>Computed by changing one parameter at a time from its “low” to “high” while others are fixed at base (deterministic mid‑case; weight‑aware for Discrete). Low/High are taken from distribution definitions: Normal = mean±1.28σ; Triangular/PERT/Uniform = Min/Max; Known = P90/P10; Discrete = min/max of values. Axis units follow the selected metric (MMBO, BCF, or MMBOE). Bars are:</p>
+      <h3 id="dists">5) Distributions</h3>
+      <p>Six distribution types are available for each parameter:</p>
       <ul>
-        <li><span style="color:var(--up)">Green</span> for positive Δ (upside),</li>
-        <li><span style="color:var(--down)">Red</span> for negative Δ (downside).</li>
-      </ul>
-      <p>Sorted from biggest impact (top) to smallest (bottom). Left aligned, narrower for readability.</p>
-
-      <h3 id="csv">9) CSV export</h3>
-      <p>Use the buttons to export a <b>summary CSV</b> and a <b>samples CSV</b> (in-place & recoverable per iteration).</p>
-
-      <h3 id="tips">10) Tips</h3>
-      <ul>
-        <li>Set a <b>seed</b> for reproducible results.</li>
-        <li>Increase <b>iterations</b> for smoother CDFs.</li>
-        <li>Use <b>PERT</b> instead of Triangular for a smoother shape when you know min/mode/max.</li>
-        <li>Use <b>Normal (default)</b> unless you have clear min/mode/max or P90/P50/P10 knowledge.</li>
+        <li><b>Normal</b> (default): Enter <i>Mean</i> and <i>Std Dev</i>. The third field is ignored. Draws are <b>truncated</b> to physical bounds (accept&#8211;reject sampling).</li>
+        <li><b>Triangular</b>: Enter <i>Min</i>, <i>Mode</i>, <i>Max</i>. Requires Min &#8804; Mode &#8804; Max.</li>
+        <li><b>PERT</b> (Beta&#8209;PERT, &#955; = 4): Enter <i>Min</i>, <i>Mode</i>, <i>Max</i>. Smoother alternative to Triangular. Implied mean = (Min + 4&#215;Mode + Max) / 6. Truncated to physical bounds.</li>
+        <li><b>Uniform</b>: Enter <i>Min</i> and <i>Max</i>. The middle field is ignored. All values in [Min, Max] are equally likely.</li>
+        <li><b>Known Distribution</b>: Enter <i>P90</i>, <i>P50</i>, <i>P10</i>. Internally converted to a Normal fit: mean = P50, &#963; estimated from the P90&#8211;P10 spread.</li>
+        <li><b>Discrete</b>: Enter 1, 2, or 3 distinct values with optional <b>weight percentages</b>. If weights are blank, they auto&#8209;balance (e.g., 50/50 for two values, ~33/33/34 for three). Provided weights are normalised automatically.</li>
       </ul>
 
-      <h3 id="trouble">11) Troubleshooting</h3>
+      <h3 id="trunc">6) Physical Truncation</h3>
+      <p>All random draws are constrained to physically sensible ranges via accept&#8211;reject sampling:</p>
       <ul>
-        <li>Input error messages point to the first offending field (e.g., Triangular min ≤ mode ≤ max).</li>
-        <li>If a plot appears blank, check for missing numbers in required fields.</li>
+        <li><b>NTG, Porosity, Sw, RF</b>: 0 to 1</li>
+        <li><b>Bo</b>: &#8805; 1.0</li>
+        <li><b>Bg, Rv, Rs</b>: &gt; 0</li>
+        <li><b>Area, Thickness, GRV</b>: &gt; 0</li>
+        <li><b>Coal Density</b>: &gt; 0.1</li>
+        <li><b>Gas Content</b>: &gt; 0</li>
       </ul>
 
-      <h3 id="gloss">12) Glossary</h3>
+      <h3 id="engine">7) Monte Carlo Engine</h3>
+      <p>For each iteration, every input is sampled independently (or jointly via correlations in Advanced Mode), then the volumetric formula is evaluated:</p>
       <ul>
-        <li><b>P10/P50/P90</b>: high/median/low outcomes (90/50/10% probability of being exceeded).</li>
-        <li><b>NTG</b>: Net to Gross. <b>φ</b>: Porosity. <b>Sw</b>: Water saturation.</li>
-        <li><b>PERT</b>: Beta‑PERT distribution (λ=4) defined by Min, Mode, Max; smoother alternative to Triangular.</li>
-        <li><b>Bg</b>: Gas formation volume factor in scf/SCF (reservoir cubic feet per standard cubic foot).</li>
-  <li><b>Rs</b>: Solution gas‑oil ratio in scf/bbl.</li>
-  <li><b>Rv</b>: Vaporized oil‑gas ratio in bbl/scf.</li>
+        <li><b>Oil (STOIIP):</b> <code>7,758 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bo</code> &#8594; MMBO</li>
+        <li><b>Gas (GIIP):</b> <code>43,560 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bg</code> &#8594; BCF</li>
+        <li><b>Coal Seam Gas (GIIP):</b> <code>48,013 &#215; A &#215; h &#215; &#961;<sub>coal</sub> &#215; G<sub>c</sub></code> &#8594; BCF</li>
+        <li><b>Oil + Solution Gas:</b> STOIIP and Solution Gas GIIP computed simultaneously (see Dual&#8209;Phase section).</li>
+        <li><b>Gas + Vaporized Oil:</b> GIIP and Vaporized Oil computed simultaneously (see Dual&#8209;Phase section).</li>
+      </ul>
+      <p>Recoverable volume = In&#8209;place &#215; RF. P10 / P50 / P90 are computed from the <b>empirical CDF</b>. The <b>deterministic mid&#8209;case</b> uses the most likely input value for each parameter: Normal &#8594; mean; Triangular / PERT &#8594; mode; Uniform &#8594; midpoint; Known &#8594; P50; Discrete &#8594; highest&#8209;weighted value.</p>
+      <p><b>Seeded RNG:</b> Supply a seed value for reproducible results. Uses the Mulberry32 algorithm. Leave blank for a random seed each run.</p>
+
+      <h3 id="outputs">8) Outputs</h3>
+      <ul>
+        <li><b>CDF Plots</b> (in&#8209;place &amp; recoverable): Cumulative distribution curves with red markers at P90 / P50 / P10 and a purple diamond for the deterministic mid&#8209;case.</li>
+        <li><b>Histograms</b> (in&#8209;place &amp; recoverable): Frequency distributions with vertical markers at P90 / P50 / P10 and deterministic mid&#8209;case.</li>
+        <li><b>Tornado Chart</b>: Sensitivity of each input parameter (see Tornado section).</li>
+        <li><b>Summary Table</b>: P90 / P50 / P10 for in&#8209;place and recoverable, plus the deterministic mid&#8209;case and its equivalent P&#8209;value (e.g., &#8220;P45&#8221;).</li>
+        <li><b>Plot zoom syncing:</b> All four plots share synchronised zoom/pan. Use the <b>Reset</b> buttons to restore the default view.</li>
+      </ul>
+
+      <h3 id="dualphase">9) Dual&#8209;Phase Fluids</h3>
+      <p>When <b>Oil + Solution Gas</b> or <b>Gas + Vaporized Oil</b> is selected, a <b>Results Metric</b> dropdown appears:</p>
+      <ul>
+        <li><b>Oil + Solution Gas:</b>
+          <ul>
+            <li>STOIIP (MMBO): <code>7,758 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bo</code></li>
+            <li>GIIP (BCF): <code>7,758 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) &#215; Rs / Bo</code> (&#247; 1e9 &#8594; BCF)</li>
+            <li>Total (MMBOE): STOIIP + GIIP converted to BOE (BCF / 5.8 = MMBOE)</li>
+          </ul>
+        </li>
+        <li><b>Gas + Vaporized Oil:</b>
+          <ul>
+            <li>GIIP (BCF): <code>43,560 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bg</code> (&#247; 1e9 &#8594; BCF)</li>
+            <li>Vaporized Oil (MMBO): <code>43,560 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) &#215; Rv / Bg</code> (&#247; 1e6 &#8594; MMBO)</li>
+            <li>Total (MMBOE): GIIP as MMBOE + Vaporized Oil (MMBO)</li>
+          </ul>
+        </li>
+      </ul>
+      <p>The results table automatically shows a <b>sub&#8209;component breakdown</b>: for example, Oil + Solution Gas &#8220;Total&#8221; shows STOIIP and Solution Gas as sub&#8209;rows beneath the total, for both in&#8209;place and recoverable volumes.</p>
+
+      <h3 id="tornado-help">10) Tornado Sensitivity</h3>
+      <p>The tornado chart shows the impact of varying each input parameter individually, while holding all others at their deterministic mid&#8209;case values.</p>
+      <ul>
+        <li><b>Low/High bounds</b> are derived from each distribution: Normal = mean &#177; 1.28&#963; (&#8776; P10/P90); Triangular / PERT / Uniform = Min / Max; Known = P90 / P10; Discrete = min / max of the entered values.</li>
+        <li><span style="color:var(--up)">Green bars</span> = positive impact (upside); <span style="color:var(--down)">Red bars</span> = negative impact (downside).</li>
+        <li>Parameters are sorted from largest impact (top) to smallest (bottom).</li>
+        <li>There is no limit to the number of variables shown.</li>
+      </ul>
+
+      <h3 id="advanced">11) Advanced Mode (Multi&#8209;Reservoir)</h3>
+      <p>Toggle <b>Advanced Mode</b> on to enable multi&#8209;reservoir analysis.</p>
+      <ul>
+        <li><b>Reservoir Tabs:</b> Click tabs to switch between reservoirs. Each reservoir has independent fluid type, parameter distributions, recovery factor, and name.</li>
+        <li><b>Add / Remove:</b> Use <b>+ Add</b> to create up to 5 reservoirs. Click <b>&#215;</b> on a tab to remove a reservoir (minimum 1).</li>
+        <li><b>Rename:</b> Use the <b>Reservoir Name</b> field &#8212; the tab label updates automatically.</li>
+        <li><b>Results View:</b> After running, switch between <b>Total (All Reservoirs)</b> to see aggregate P&#8209;values, or select an individual reservoir to see its standalone results.</li>
+        <li><b>Multi&#8209;Reservoir Summary Table:</b> Shows P90 / P50 / P10 for each reservoir plus an aggregated <b>Total</b> row. For dual&#8209;phase reservoirs, sub&#8209;component rows are included. The total is computed by summing per&#8209;iteration volumes across all reservoirs (after unit conversion to MMBOE), then taking P&#8209;values of the summed distribution.</li>
+      </ul>
+
+      <h3 id="correlations">12) Parameter Correlations (Spearman &#961;)</h3>
+      <p>Define dependencies <b>between parameters within the same reservoir</b> using Spearman rank correlations.</p>
+      <ul>
+        <li>The <b>correlation matrix</b> (under &#8220;Parameter Correlations&#8221;) shows all parameter pairs. Enter values from <b>&#8722;1</b> (perfect inverse) to <b>+1</b> (perfect positive). <b>0</b> = independent.</li>
+        <li><b>Presets:</b> &#8220;None (Independent)&#8221; sets all to 0. &#8220;Typical Clastic&#8221; applies geologically common correlations (e.g., positive porosity&#8211;NTG, negative porosity&#8211;Sw).</li>
+        <li><b>Positive definite check:</b> The matrix must be positive semi&#8209;definite &#8212; a warning appears if it is not. Adjust values until the warning clears.</li>
+        <li><b>Engine:</b> Correlations are enforced using the <b>Iman&#8209;Conover</b> method with Cholesky decomposition, which rearranges the rank structure of independently drawn samples to match the target correlation matrix while preserving each parameter&#8217;s marginal distribution.</li>
+      </ul>
+
+      <h3 id="shared">13) Shared Parameters</h3>
+      <p>In Advanced Mode, downstream reservoirs (2nd, 3rd, etc.) can <b>reuse the exact samples</b> from an upstream reservoir for any matching parameter.</p>
+      <ul>
+        <li>Under &#8220;Shared Parameters&#8221;, each parameter shows a dropdown: <b>Independent</b> (default) or <b>Same as [Reservoir Name]</b>.</li>
+        <li>When shared, the downstream reservoir uses the <i>same sample array</i> drawn for that parameter in the source reservoir. This models situations where two reservoirs share the same geological property (e.g., same porosity across a shared formation).</li>
+        <li>The first reservoir cannot have shared links (it has no upstream source).</li>
+        <li>Shared parameters are applied <i>before</i> correlations, so shared samples still participate in the Iman&#8209;Conover rank adjustment.</li>
+      </ul>
+
+      <h3 id="interres">14) Inter&#8209;Reservoir Correlations</h3>
+      <p>Define dependencies <b>between the same parameter across different reservoirs</b>.</p>
+      <ul>
+        <li>The table (under &#8220;Inter&#8209;Reservoir Correlations&#8221;) has one row per parameter and one column per reservoir pair (e.g., R1 &#8596; R2, R1 &#8596; R3).</li>
+        <li>Enter Spearman &#961; values from <b>&#8722;1</b> to <b>+1</b>. Only parameters that exist in both reservoirs of a pair are available.</li>
+        <li>These correlations are combined with each reservoir&#8217;s intra&#8209;parameter correlations into a single unified block correlation matrix, which is applied jointly using a single Iman&#8209;Conover pass across all reservoirs.</li>
+        <li><b>Example:</b> Setting Area correlation = 0.8 between R1 and R2 means when R1 draws a high Area, R2 is likely to as well &#8212; modelling geological proximity.</li>
+      </ul>
+
+      <h3 id="previews">15) Distribution Previews</h3>
+      <p>The <b>Distribution Previews</b> panel (collapsed by default) shows a mini PDF plot for each parameter, including the Recovery Factor. Previews update in real time as you change distribution types or values, and respect physical truncation bounds. Fractions are displayed as percentages for readability.</p>
+
+      <h3 id="csv">16) CSV Export</h3>
+      <p>Two export buttons appear after a simulation run:</p>
+      <ul>
+        <li><b>Summary CSV:</b> P90, P50, P10, and deterministic mid&#8209;case for in&#8209;place and recoverable volumes.</li>
+        <li><b>Samples CSV:</b> Every iteration with all input values (Area, Thickness/GRV, NTG, Porosity, Sw, Bo/Bg, RF, etc.) plus computed in&#8209;place and recoverable volumes, with units in the header row.</li>
+      </ul>
+
+      <h3 id="tips">17) Tips</h3>
+      <ul>
+        <li>Set a <b>seed</b> for reproducible results across runs.</li>
+        <li>Increase <b>iterations</b> (e.g., 50,000) for smoother CDFs, especially with multiple reservoirs.</li>
+        <li>Use <b>PERT</b> instead of Triangular when you know min/mode/max but want a smoother, less angular shape.</li>
+        <li>Use <b>Normal</b> (default) unless you have clear min/mode/max or P90/P50/P10 knowledge.</li>
+        <li>Use <b>Known Distribution</b> if you have P&#8209;values from an external source &#8212; it fits a Normal internally.</li>
+        <li>Start with <b>basic mode</b> for a single reservoir, then switch to Advanced Mode to add more.</li>
+        <li>For dual&#8209;phase fluids, run with <b>Total (MMBOE)</b> first to see the combined picture, then check individual components.</li>
+        <li>Click any <b>collapsible section header</b> to expand or collapse it &#8212; reduces clutter in the left panel.</li>
+      </ul>
+
+      <h3 id="trouble">18) Troubleshooting</h3>
+      <ul>
+        <li><b>Input errors:</b> Error messages point to the first offending field (e.g., &#8220;Triangular min &#8804; mode &#8804; max&#8221;).</li>
+        <li><b>Blank plots:</b> Check for missing numbers in required fields &#8212; fields labelled &#8220;(ignore)&#8221; can be left empty.</li>
+        <li><b>Correlation matrix not positive definite:</b> Reduce extreme correlation values. A warning appears below the matrix &#8212; adjust until it clears.</li>
+        <li><b>Shared parameter greyed out:</b> The source reservoir must have the same parameter (same fluid type and geometry mode).</li>
+        <li><b>Inter&#8209;reservoir cell shows &#8220;&#8212;&#8221;:</b> That parameter doesn&#8217;t exist in one of the two reservoirs in the pair.</li>
+      </ul>
+
+      <h3 id="gloss">19) Glossary</h3>
+      <ul>
+        <li><b>P10 / P50 / P90</b>: High / median / low outcomes (probability of being <i>exceeded</i>: 90%, 50%, 10% respectively).</li>
+        <li><b>NTG</b>: Net to Gross ratio. <b>&#966;</b>: Porosity. <b>Sw</b>: Water saturation.</li>
+        <li><b>Bo</b>: Oil formation volume factor (RB/STB).</li>
+        <li><b>Bg</b>: Gas formation volume factor (scf/SCF).</li>
+        <li><b>Rs</b>: Solution gas&#8211;oil ratio (scf/bbl).</li>
+        <li><b>Rv</b>: Vaporized oil&#8211;gas ratio (bbl/scf).</li>
+        <li><b>GRV</b>: Gross Rock Volume &#8212; the product of Area &#215; Thickness when entered directly.</li>
+        <li><b>STOIIP</b>: Stock&#8209;Tank Original Oil In Place (MMBO).</li>
+        <li><b>GIIP</b>: Gas Initially In Place (BCF).</li>
+        <li><b>MMBOE</b>: Millions of Barrels of Oil Equivalent (1 BCF &#8776; 1/5.8 MMBOE).</li>
+        <li><b>PERT</b>: Beta&#8209;PERT distribution (&#955; = 4); smoother alternative to Triangular.</li>
+        <li><b>Iman&#8209;Conover</b>: Rank&#8209;based method for imposing a target Spearman correlation structure on independently sampled distributions.</li>
+        <li><b>Spearman &#961;</b>: Rank correlation coefficient, &#8722;1 to +1. Measures monotonic (not necessarily linear) association.</li>
+        <li><b>Cholesky decomposition</b>: Matrix factorisation used internally to apply the target correlation structure.</li>
       </ul>
 
       <div class="manual-footer">
