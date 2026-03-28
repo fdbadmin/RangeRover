@@ -1644,10 +1644,14 @@ document.querySelectorAll('.rf-v').forEach(inp => inp.addEventListener('input', 
 function labelsForUI() { return labelsFor(FLUID.value); }
 function labelsAndFormula() {
   const L = labelsForUI();
-  document.getElementById('results-title').innerHTML = `Results (${L.unit}) <span class="chip">P90 / P50 / P10</span>`;
-  document.getElementById('metric-name').textContent = L.primary;
-  document.getElementById('metric-name-rec').textContent = L.metricRec;
-  document.getElementById('formula-note').innerHTML = L.formula;
+  const rt = document.getElementById('results-title');
+  const mn = document.getElementById('metric-name');
+  const mr = document.getElementById('metric-name-rec');
+  const fn = document.getElementById('formula-note');
+  if (rt) rt.innerHTML = `Results (${L.unit}) <span class="chip">P90 / P50 / P10</span>`;
+  if (mn) mn.textContent = L.primary;
+  if (mr) mr.textContent = L.metricRec;
+  if (fn) fn.innerHTML = L.formula;
 }
 
 function mountResultsTypeSelector() {
