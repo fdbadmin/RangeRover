@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RangeRover — QC Test Plan</title>
+<style>
+  :root {
+    --pass: #166534; --fail: #991b1b; --skip: #92400e;
+    --pass-bg: #dcfce7; --fail-bg: #fee2e2; --skip-bg: #fef3c7;
+    --border: #d1d5db; --head-bg: #1e3a5f; --head-fg: #fff;
+    --sub-bg: #f0f4ff; --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #111; background: #fff; padding: 24px 32px; }
+  h1 { font-size: 22px; color: var(--head-bg); border-bottom: 3px solid var(--head-bg); padding-bottom: 8px; margin-bottom: 4px; }
+  .meta { font-size: 12px; color: #555; margin-bottom: 20px; }
+  h2 { font-size: 15px; background: var(--head-bg); color: var(--head-fg); padding: 6px 10px; margin: 28px 0 0 0; border-radius: 4px 4px 0 0; }
+  h3 { font-size: 13px; font-weight: 700; background: #e8edf5; padding: 5px 10px; margin: 12px 0 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  th { background: #374151; color: #fff; padding: 5px 8px; text-align: left; font-size: 12px; }
+  td { padding: 5px 8px; border: 1px solid var(--border); vertical-align: top; font-size: 12px; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  .id { width: 52px; font-weight: 700; white-space: nowrap; }
+  .check { width: 52px; text-align: center; }
+  .expected { font-family: monospace; background: var(--code-bg); padding: 1px 3px; border-radius: 3px; white-space: nowrap; }
+  .section-note { background: #fffbeb; border-left: 3px solid #f59e0b; padding: 6px 10px; margin: 8px 0; font-size: 12px; }
+  .formula { font-family: monospace; font-size: 11px; background: var(--code-bg); padding: 4px 8px; border-radius: 3px; display: inline-block; }
+  .pass-box { display: inline-block; width: 16px; height: 16px; border: 1.5px solid #374151; border-radius: 3px; vertical-align: middle; }
+  .toc { background: #f8fafc; border: 1px solid var(--border); padding: 10px 16px; display: inline-block; margin-bottom: 18px; border-radius: 4px; }
+  .toc a { display: block; color: #1e3a5f; text-decoration: none; font-size: 12px; line-height: 1.8; }
+  .toc a:hover { text-decoration: underline; }
+  .warn { color: #92400e; font-weight: 600; }
+  .tolerance { font-size: 11px; color: #555; font-style: italic; }
+  @media print {
+    body { padding: 12px 16px; }
+    h2 { page-break-before: auto; }
+    table { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>RangeRover — End-to-End QC Test Plan</h1>
+<div class="meta">
+  Purpose: Formal verification of all calculation, unit, and UI logic before use in business decisions.<br>
+  Tester: _________________ &nbsp;&nbsp; Date: _________________ &nbsp;&nbsp; App version / commit: _________________<br>
+  Pass criterion: all items marked ✓. Any ✗ must be logged as a defect before the tool is used for decisions.
+</div>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <a href="#s0">0. Pre-flight</a>
+  <a href="#s1">1. Formula Accuracy — Deterministic Mid-Case (Field Units)</a>
+  <a href="#s2">2. Formula Accuracy — Deterministic Mid-Case (SI Units)</a>
+  <a href="#s3">3. GRV Geometry Mode</a>
+  <a href="#s4">4. Distribution Types &amp; Truncation</a>
+  <a href="#s5">5. Recovery Factor</a>
+  <a href="#s6">6. Monte Carlo Statistical Properties</a>
+  <a href="#s7">7. Dual-Phase Fluids — Results Metric Selector</a>
+  <a href="#s8">8. Tornado Sensitivity Chart</a>
+  <a href="#s9">9. CSV Export — Summary</a>
+  <a href="#s10">10. CSV Export — Samples</a>
+  <a href="#s11">11. Parameter Correlations</a>
+  <a href="#s12">12. Advanced Mode — Multi-Reservoir</a>
+  <a href="#s13">13. Project Save / Load Round-Trip</a>
+  <a href="#s14">14. UI Consistency &amp; Labels</a>
+  <a href="#s15">15. Input Validation &amp; Error Handling</a>
+  <a href="#s16">16. Edge Cases</a>
+</div>
+
+<p class="section-note">
+  <strong>How to use this plan:</strong> Work through each section sequentially. Use the default values loaded by the app (click Reset between tests unless noted). The <span class="expected">expected</span> values are derived from the source code and hand-calculated — discrepancies indicate a bug. Tolerance for deterministic values is ±0.001 in displayed units. Tick the <span class="pass-box"></span> box for Pass, write ✗ + notes for any failure.
+</p>
+
+<!-- ===== SECTION 0 ===== -->
+<h2 id="s0">0. Pre-flight</h2>
+<table>
+  <tr><th class="id">ID</th><th>Check</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">0.1</td><td>Open <code>index.html</code> in a modern browser (Chrome/Firefox/Edge). No console errors on load.</td><td>No red errors in DevTools Console.</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">0.2</td><td>All four plot areas, the tornado chart, and the summary table are present but empty.</td><td>Placeholder text or empty axes visible; no NaN or undefined text.</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">0.3</td><td>The results-title header and formula note update immediately on page load (before any Run).</td><td>Shows correct fluid (Oil) formula with correct unit (MMBO in field mode).</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">0.4</td><td>Default fluid = Oil, unit system = Field, geometry = Area × Thickness, area unit = acres, thickness unit = ft.</td><td>All dropdowns show these values on fresh load.</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">0.5</td><td>Click <strong>Reset</strong>. Page reloads to defaults with no errors.</td><td>All fields return to initial state.</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 1 ===== -->
+<h2 id="s1">1. Formula Accuracy — Deterministic Mid-Case (Field Units)</h2>
+
+<p class="section-note">
+  <strong>Method:</strong> Set every distribution to <em>Normal</em> with Mean = the value shown below and Std Dev = 0.001 (near-zero variance). Run 1,000 iterations. The <strong>Deterministic Mid-Case</strong> column in the results table is computed analytically (not from samples) — it must equal the hand-calculated value exactly. The P50 from Monte Carlo should be within ±0.001 of the det. mid-case.
+  <br>Normal distribution mid-case = Mean; that is what <code>mostLikely()</code> returns for Normal.
+</p>
+
+<h3>1A — Oil (STOIIP)</h3>
+<div class="formula">STOIIP = 7758 × A(acres) × h(ft) × NTG × φ × (1−Sw) / Bo / 10⁶  [MMBO]</div>
+<table>
+  <tr><th>Parameter</th><th>Mean value</th><th>Std Dev to enter</th></tr>
+  <tr><td>Area (acres)</td><td>50</td><td>0.001</td></tr>
+  <tr><td>Thickness (ft)</td><td>50</td><td>0.001</td></tr>
+  <tr><td>Net to Gross</td><td>0.6</td><td>0.001</td></tr>
+  <tr><td>Porosity</td><td>0.2</td><td>0.001</td></tr>
+  <tr><td>Water Saturation</td><td>0.3</td><td>0.001</td></tr>
+  <tr><td>Bo (RB/STB)</td><td>1.3</td><td>0.001</td></tr>
+  <tr><td>Recovery Factor</td><td>0.5</td><td>0.001</td></tr>
+</table>
+<p style="margin:6px 0 4px 0; font-size:12px">Hand calculation: 7758 × 50 × 50 × 0.6 × 0.2 × 0.7 / 1.3 / 10⁶</p>
+<table>
+  <tr><th class="id">ID</th><th>Metric</th><th>Expected (Field)</th><th class="check">P/F</th></tr>
+  <tr><td class="id">1A.1</td><td>In-place Det. Mid-Case</td><td class="expected">1.2532 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1A.2</td><td>Recoverable Det. Mid-Case</td><td class="expected">0.6266 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1A.3</td><td>Monte Carlo P50 (in-place) within ±0.001 of Det. Mid-Case</td><td class="expected">≈ 1.253 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<h3>1B — Gas (GIIP)</h3>
+<div class="formula">GIIP = 43560 × A × h × NTG × φ × (1−Sw) / Bg / 10⁹  [BCF]</div>
+<table>
+  <tr><th>Parameter</th><th>Mean</th><th>Std Dev</th></tr>
+  <tr><td>Area (acres)</td><td>50</td><td>0.001</td></tr>
+  <tr><td>Thickness (ft)</td><td>60</td><td>0.001</td></tr>
+  <tr><td>Net to Gross</td><td>0.6</td><td>0.001</td></tr>
+  <tr><td>Porosity</td><td>0.2</td><td>0.001</td></tr>
+  <tr><td>Water Saturation</td><td>0.3</td><td>0.001</td></tr>
+  <tr><td>Bg (scf/SCF)</td><td>0.005</td><td>0.00001</td></tr>
+  <tr><td>Recovery Factor</td><td>0.5</td><td>0.001</td></tr>
+</table>
+<p style="margin:6px 0 4px 0; font-size:12px">Hand calculation: 43560 × 50 × 60 × 0.6 × 0.2 × 0.7 / 0.005 / 10⁹</p>
+<table>
+  <tr><th class="id">ID</th><th>Metric</th><th>Expected (Field)</th><th class="check">P/F</th></tr>
+  <tr><td class="id">1B.1</td><td>In-place Det. Mid-Case</td><td class="expected">2.1954 BCF</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1B.2</td><td>Recoverable Det. Mid-Case</td><td class="expected">1.0977 BCF</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<h3>1C — Coal Seam Gas (GIIP)</h3>
+<div class="formula">GIIP = 43560 × A(acres) × h(ft) × ρ(t/m³) × Gc(m³/t) / 10⁹  [BCF]</div>
+<table>
+  <tr><th>Parameter</th><th>Mean</th><th>Std Dev</th></tr>
+  <tr><td>Area (acres)</td><td>50</td><td>0.001</td></tr>
+  <tr><td>Thickness (ft)</td><td>5</td><td>0.001</td></tr>
+  <tr><td>Coal Density (g/cm³ = t/m³)</td><td>1.4</td><td>0.001</td></tr>
+  <tr><td>Gas Content (m³/tonne)</td><td>15</td><td>0.001</td></tr>
+  <tr><td>Recovery Factor</td><td>0.5</td><td>0.001</td></tr>
+</table>
+<p style="margin:6px 0 4px 0; font-size:12px">Hand calculation: 43560 × 50 × 5 × 1.4 × 15 / 10⁹ = 228,690,000 / 10⁹</p>
+<table>
+  <tr><th class="id">ID</th><th>Metric</th><th>Expected (Field)</th><th class="check">P/F</th></tr>
+  <tr><td class="id">1C.1</td><td>In-place Det. Mid-Case</td><td class="expected">0.2287 BCF</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1C.2</td><td>Recoverable Det. Mid-Case</td><td class="expected">0.1143 BCF</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<h3>1D — Oil + Solution Gas (Dual-Phase), Results Metric = Total</h3>
+<div class="formula">
+  Total (BOE) = STOIIP(STB) + SolGas(SCF)/5800 &nbsp;→&nbsp; /10⁶ [MMBOE]<br>
+  SolGas(SCF) = STOIIP(STB) × Rs
+</div>
+<table>
+  <tr><th>Parameter</th><th>Mean</th><th>Std Dev</th></tr>
+  <tr><td>Area / Thickness / NTG / φ / Sw / Bo</td><td colspan="2">Same as 1A (50, 50, 0.6, 0.2, 0.3, 1.3)</td></tr>
+  <tr><td>Rs (scf/bbl)</td><td>800</td><td>0.1</td></tr>
+  <tr><td>Recovery Factor</td><td>0.5</td><td>0.001</td></tr>
+</table>
+<p style="margin:6px 0 4px 0; font-size:12px">
+  STOIIP = 1,253,215 STB &nbsp;|&nbsp; SolGas = 1,253,215 × 800 = 1,002,572,000 SCF<br>
+  Total BOE = 1,253,215 + 1,002,572,000/5800 = 1,253,215 + 172,857 = 1,426,072 BOE
+</p>
+<table>
+  <tr><th class="id">ID</th><th>Metric / View</th><th>Expected (Field)</th><th class="check">P/F</th></tr>
+  <tr><td class="id">1D.1</td><td>Total Det. Mid-Case</td><td class="expected">1.4261 MMBOE</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1D.2</td><td>Recoverable Total Det. Mid-Case</td><td class="expected">0.7130 MMBOE</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1D.3</td><td>Switch metric to STOIIP — Det. Mid-Case</td><td class="expected">1.2532 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1D.4</td><td>Switch metric to GIIP — Det. Mid-Case</td><td class="expected">1.0026 BCF</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1D.5</td><td>Results table shows STOIIP sub-row and Solution Gas sub-row below Total</td><td class="expected">Sub-rows visible with correct labels</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<h3>1E — Gas + Vaporized Oil (Dual-Phase), Results Metric = Total</h3>
+<div class="formula">
+  Total (BOE) = GIIP(SCF)/5800 + VO(STB) &nbsp;→&nbsp; /10⁶ [MMBOE]<br>
+  VO(STB) = GIIP(SCF) × Rv
+</div>
+<table>
+  <tr><th>Parameter</th><th>Mean</th><th>Std Dev</th></tr>
+  <tr><td>Area / Thickness / NTG / φ / Sw / Bg</td><td colspan="2">Same as 1B (50, 60, 0.6, 0.2, 0.3, 0.005)</td></tr>
+  <tr><td>Rv (bbl/scf)</td><td>0.001</td><td>0.00001</td></tr>
+  <tr><td>Recovery Factor</td><td>0.5</td><td>0.001</td></tr>
+</table>
+<p style="margin:6px 0 4px 0; font-size:12px">
+  GIIP = 2,195,424,000 SCF &nbsp;|&nbsp; VO = 2,195,424,000 × 0.001 = 2,195,424 STB<br>
+  Total BOE = 2,195,424,000/5800 + 2,195,424 = 378,521 + 2,195,424 = 2,573,945 BOE
+</p>
+<table>
+  <tr><th class="id">ID</th><th>Metric / View</th><th>Expected (Field)</th><th class="check">P/F</th></tr>
+  <tr><td class="id">1E.1</td><td>Total Det. Mid-Case</td><td class="expected">2.5739 MMBOE</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1E.2</td><td>Recoverable Total Det. Mid-Case</td><td class="expected">1.2870 MMBOE</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1E.3</td><td>Switch metric to GIIP — Det. Mid-Case</td><td class="expected">2.1954 BCF</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">1E.4</td><td>Switch metric to Vaporized Oil — Det. Mid-Case</td><td class="expected">2.1954 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 2 ===== -->
+<h2 id="s2">2. Formula Accuracy — Deterministic Mid-Case (SI Units)</h2>
+
+<p class="section-note">
+  Switch <strong>Output unit system → SI</strong>. Area auto-switches to km², thickness to m. Re-enter input values in the new units (or keep field-unit values but note the different axis scale). The simplest approach: keep the same test as Section 1 but switch unit system, re-enter values in acres/ft (the area/thickness unit dropdowns can be switched manually back to acres/ft independently), and verify the results change consistently.<br><br>
+  <strong>Conversion factors used internally:</strong><br>
+  Oil: 1 STB = 0.158987 m³ &nbsp;→&nbsp; oilFactor = 10⁶/0.158987 ≈ 6,289,815 STB/MMSm³<br>
+  Gas: 1 SCF = 0.0283168 m³ &nbsp;→&nbsp; gasFactor = 10⁹/0.0283168 ≈ 35,314,667 SCF/GSm³
+</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected (SI)</th><th class="check">P/F</th></tr>
+  <tr><td class="id">2.1</td><td>Oil test (1A inputs, area=acres, thick=ft): In-place Det. Mid-Case in SI<br><span class="tolerance">1.2532 MMBO × 0.158987</span></td><td class="expected">0.1992 MMSm³</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">2.2</td><td>Oil: Recoverable Det. Mid-Case in SI</td><td class="expected">0.0996 MMSm³</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">2.3</td><td>Gas test (1B inputs): In-place Det. Mid-Case in SI<br><span class="tolerance">2.1954 BCF × 0.0283168</span></td><td class="expected">0.06215 GSm³</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">2.4</td><td>Gas: Recoverable Det. Mid-Case in SI</td><td class="expected">0.03108 GSm³</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">2.5</td><td>Results Metric dropdown (oilgas / gasvo) shows SI unit labels: MMSm³, GSm³, MMSm³ oe (not MMBO / BCF / MMBOE)</td><td class="expected">Labels update dynamically</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">2.6</td><td>Summary table column headers update to SI units</td><td class="expected">MMSm³ / GSm³ in headers</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">2.7</td><td>Formula note below results shows SI units (e.g. "plots in MMSm³")</td><td class="expected">SI unit labels in formula note</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">2.8</td><td>Switch back to Field units. Results revert to MMBO / BCF immediately.</td><td class="expected">Labels and values match Section 1</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 3 ===== -->
+<h2 id="s3">3. GRV Geometry Mode</h2>
+
+<p class="section-note">
+  Switch <strong>Geometry → GRV</strong>. The Area and Thickness rows are replaced by a single GRV row. Units available: 10⁶ acre-ft, 10⁹ ft³, 10⁶ m³. Internally, GRV is stored in acre-ft after multiplying by the selected factor (1×10⁶, 1×10⁹/43560, or 1×10⁶/1233.48 respectively). Entering the equivalent of 2500 acre-ft should reproduce the Oil test (1A).
+</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">3.1</td><td>
+    GRV unit = <strong>10⁶ acre-ft</strong>, GRV mean = <strong>0.0025</strong> (= 2500 acre-ft).<br>
+    Other params same as 1A (NTG=0.6, φ=0.2, Sw=0.3, Bo=1.3, RF=0.5).<br>
+    Oil STOIIP Det. Mid-Case:
+  </td><td class="expected">1.2532 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">3.2</td><td>
+    GRV unit = <strong>10⁹ ft³</strong>, GRV mean = <strong>0.0001089</strong> (= 2500 acre-ft × 43560 ft³/acre-ft / 10⁹).<br>
+    Same result as 3.1.
+  </td><td class="expected">1.2532 MMBO (±0.001)</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">3.3</td><td>
+    GRV unit = <strong>10⁶ m³</strong>, GRV mean = <strong>0.003083</strong> (= 2500 × 1233.48 m³/acre-ft / 10⁶).<br>
+    Same result as 3.1.
+  </td><td class="expected">1.2532 MMBO (±0.001)</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">3.4</td><td>Distribution preview for GRV shows correct x-axis label matching selected GRV unit.</td><td class="expected">e.g. "10⁶ acre-ft"</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">3.5</td><td>Switch back to Area × Thickness. GRV row disappears; Area + Thickness rows reappear with their previous values.</td><td class="expected">Parameters restored correctly</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 4 ===== -->
+<h2 id="s4">4. Distribution Types &amp; Truncation</h2>
+
+<p class="section-note">Use Oil fluid type. Change only the <strong>Porosity</strong> distribution to test each type; keep all other parameters as test 1A defaults. Distribution Previews panel should update in real time. Check the Det. Mid-Case changes consistently with the distribution type.  Use 10,000 iterations for P-value checks.</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Distribution / Inputs</th><th>Expected Det. Mid-Case (φ only relevant)</th><th>Expected P50 range</th><th class="check">P/F</th></tr>
+  <tr><td class="id">4.1</td><td><strong>Normal</strong>: Mean=0.2, Std=0.05<br>Mid-case = Mean</td><td class="expected">φ midcase = 0.2</td><td>0.19 – 0.21</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.2</td><td><strong>Triangular</strong>: Min=0.1, Mode=0.2, Max=0.35<br>Mid-case = Mode</td><td class="expected">φ midcase = 0.2</td><td>0.19 – 0.22</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.3</td><td><strong>PERT</strong>: Min=0.1, Mode=0.2, Max=0.35<br>Mid-case = Mode; implied mean=(0.1+0.8+0.35)/6=0.2083</td><td class="expected">φ midcase = 0.2</td><td>0.19 – 0.22</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.4</td><td><strong>Uniform</strong>: Min=0.1, Max=0.3<br>Mid-case = midpoint = 0.2</td><td class="expected">φ midcase = 0.2</td><td>0.19 – 0.21</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.5</td><td><strong>Known Distribution</strong>: P90=0.12, P50=0.20, P10=0.30<br>Mid-case = P50</td><td class="expected">φ midcase = 0.2</td><td>0.19 – 0.21</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.6</td><td><strong>Discrete</strong>: Val1=0.15, Val2=0.20, Val3=0.25, Weights=33/33/34<br>Mid-case = highest-weighted = 0.25 (last, weight 34)</td><td class="expected">φ midcase = 0.25</td><td>0.18 – 0.22</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.7</td><td><strong>Truncation check:</strong> Normal porosity Mean=0.5, Std=0.4. Verify P90 &lt; 1.0 and P10 &gt; 0.0 (truncated to [0,1]).</td><td>All samples in [0, 1]</td><td>P10 &gt; 0; P90 &lt; 1</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.8</td><td><strong>Bo truncation:</strong> Normal Bo Mean=1.0, Std=1.0. All samples ≥ 1.0 (lower bound).</td><td>P90 ≥ 1.0</td><td>P90 ≥ 1.0</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.9</td><td><strong>Bg truncation:</strong> Normal Bg Mean=0.0, Std=0.001 (gas fluid). Bg must be &gt; 0. No NaN or negative volumes.</td><td>No NaN in results</td><td>All volumes &gt; 0</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.10</td><td>Distribution Previews panel: toggle Porosity between Normal and Triangular. Preview plot updates without clicking Run.</td><td>Real-time update</td><td>—</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">4.11</td><td>Fraction parameters (NTG, Porosity, Sw) show <strong>percentage (×100)</strong> on preview x-axis, not raw fraction.</td><td>x-axis range 0–100 for porosity 0.2 Normal</td><td>—</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 5 ===== -->
+<h2 id="s5">5. Recovery Factor</h2>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">5.1</td><td>Oil (1A params). RF = Discrete, single value 1.0, weight 100. Recoverable Det. Mid-Case = In-place Det. Mid-Case.</td><td class="expected">Rec. = 1.2532 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">5.2</td><td>Oil (1A params). RF = Uniform Min=0.3, Max=0.7. Recoverable Det. Mid-Case = 1.2532 × 0.5 (midpoint).</td><td class="expected">Rec. = 0.6266 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">5.3</td><td>RF truncation: RF can never exceed 1.0. Set RF Normal Mean=0.9, Std=0.5. Verify P10 ≤ 1.0 and all recoverable ≤ in-place.</td><td>Max recoverable ≤ in-place in every row of Samples CSV</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">5.4</td><td>RF = Triangular Min=0.2, Mode=0.3, Max=0.4. Det. mid-case = mode = 0.3. Rec. Det. Mid-Case for Oil 1A = 1.2532 × 0.3.</td><td class="expected">Rec. = 0.3760 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 6 ===== -->
+<h2 id="s6">6. Monte Carlo Statistical Properties</h2>
+
+<p class="section-note">Use Oil with default Normal distributions (prefill defaults). Run 50,000 iterations for reliable statistics.</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">6.1</td><td>P90 &lt; P50 &lt; P10 (RangeRover convention: P90 = 10th percentile of empirical CDF = low case).</td><td>Strict ordering always holds</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">6.2</td><td>Seeded run: run twice with seed = "42". P90 / P50 / P10 are identical both times.</td><td>Exact numeric match</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">6.3</td><td>Unseeded run: run twice with blank seed. Results differ (random seed).</td><td>Values differ on second run</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">6.4</td><td>Symmetric distribution (Normal porosity only, all others deterministic via σ→0): P50 ≈ Det. Mid-Case.</td><td>|P50 − Det. Mid-Case| &lt; 0.005</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">6.5</td><td>The <strong>deterministic P-value</strong> shown (e.g. "P45") indicates the percentile rank of the Det. Mid-Case in the Monte Carlo distribution. For symmetric inputs it should be close to P50.</td><td>Reported P-value within 10 percentile points of P50</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">6.6</td><td>CDF plot: curve starts at 0 (left) and reaches 1 (right). Vertical axis 0–1. Horizontal axis spans ≥ P90 to P10.</td><td>Valid CDF shape</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">6.7</td><td>Histogram total bar area ≈ 1 (frequency density). Shape is roughly symmetric for Normal inputs.</td><td>Unimodal near-symmetric shape</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">6.8</td><td>Increasing iterations from 1,000 to 50,000 narrows the P90–P10 spread of the P-value estimates (convergence check).</td><td>Spread decreases monotonically (qualitative)</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 7 ===== -->
+<h2 id="s7">7. Dual-Phase Fluids — Results Metric Selector</h2>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">7.1</td><td>Fluid = Oil + Solution Gas. The Results Metric dropdown appears with three options.</td><td>STOIIP, GIIP (Solution Gas), Total</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">7.2</td><td>Fluid = Gas + Vaporized Oil. Metric dropdown options:</td><td>GIIP, Vaporized Oil, Total</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">7.3</td><td>Change Results Metric triggers an immediate re-run. Plots and table update without pressing Run again.</td><td>Automatic re-run on metric change</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">7.4</td><td>Unit labels in the Results Metric dropdown reflect the current output unit system (Field vs SI).</td><td>SI: MMSm³ / GSm³ / MMSm³ oe; Field: MMBO / BCF / MMBOE</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">7.5</td><td>Switch unit system while oilgas is active. Dropdown labels update immediately without re-Run.</td><td>Labels refresh on unit change</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">7.6</td><td>For Total metric (oilgas), results sub-table shows: STOIIP sub-row in oil unit and Solution Gas sub-row in gas unit, both below the Total row.</td><td>Two sub-rows with correct unit labels</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 8 ===== -->
+<h2 id="s8">8. Tornado Sensitivity Chart</h2>
+
+<p class="section-note">Use Oil, test 1A defaults (Normal distributions with meaningful std devs — use the default prefill values with their normal std devs). Run 10,000 iterations.</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">8.1</td><td>Tornado chart appears with one bar pair per parameter (including RF).</td><td>7 parameters for oil fluid</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">8.2</td><td>Bars are sorted largest impact (top) to smallest (bottom).</td><td>Strict downward ordering of bar lengths</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">8.3</td><td>For oil: Area and Thickness should be the largest drivers (large Std Dev × high impact). Bo (divides) should show negative low bar (higher Bo → lower STOIIP).</td><td>Bo low bar extends left; high bar right</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">8.4</td><td>Water Saturation: higher Sw reduces STOIIP → low-bar = higher Sw side.</td><td>Low bar (red) = high Sw scenario</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">8.5</td><td>Set all std devs to near-zero (0.001). Tornado bars should all be near-zero length.</td><td>All bars ≈ 0</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">8.6</td><td>X-axis label shows correct unit (MMBO in field mode, MMSm³ in SI mode).</td><td>Unit label matches output unit system</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">8.7</td><td>Discrete parameter (e.g. set Area to Discrete: 40 / 50 / 60): Tornado shows min/max of the discrete values.</td><td>Low = 40 scenario, High = 60 scenario</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">8.8</td><td>Known Distribution parameter: Tornado uses P90 (low) and P10 (high) values from input.</td><td>Consistent with entered P90/P10</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 9 ===== -->
+<h2 id="s9">9. CSV Export — Summary</h2>
+
+<p class="section-note">Run Oil test (1A defaults with proper Std Devs, 10,000 iterations). Download Summary CSV.</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Check</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">9.1</td><td>File downloads without error. Opens in a spreadsheet application.</td><td>Valid UTF-8 CSV</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">9.2</td><td>Header row contains: Metric, P90 (MMBO), P50 (MMBO), P10 (MMBO), Det. Mid-Case (MMBO), plus SI column (MMSm³) in field mode.</td><td>Both field and SI columns present in summary CSV</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">9.3</td><td>In-place P90 &lt; P50 &lt; P10 in CSV (same convention as UI).</td><td>Strictly ordered</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">9.4</td><td>P90 × SI_factor ≈ P90_SI_column. Verify: P90_MMBO × 0.158987 ≈ P90_MMSm³.</td><td>Ratio ≈ 0.15899 for oil</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">9.5</td><td>Switch to Gas fluid, re-run, download summary. SI column for gas: P90_BCF × 0.0283168 ≈ P90_GSm³.</td><td>Ratio ≈ 0.02832 for gas</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">9.6</td><td>Switch unit system to SI, re-run, download summary. Summary CSV values match: P90_MMSm³ = previously computed SI conversion.</td><td>Consistent with 9.4</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 10 ===== -->
+<h2 id="s10">10. CSV Export — Samples</h2>
+
+<p class="section-note">Run Oil test (1A defaults, 1,000 iterations for tractable verification). Download Samples CSV.</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Check</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">10.1</td><td>Row count = 1,000 (number of iterations) + 1 header row.</td><td>1,001 rows total</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.2</td><td>Header columns for oil: Area, Thickness, GRV, NTG, PHI, SW, FVF (Bo), RF, HCPV, primary (MMBO), recoverable (MMBO), primary_si (MMSm³), recoverable_si (MMSm³).</td><td>All columns present with correct unit labels</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.3</td><td>For a sample row: <code>primary ≈ 7758 × GRV × NTG × PHI × (1−SW) / FVF / 10⁶</code>. Pick any row and verify to 3 decimal places.</td><td>Hand-calc matches CSV value</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.4</td><td>For a sample row: <code>recoverable = primary × RF</code>.</td><td>Exact product in every row</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.5</td><td>For a sample row: <code>primary_si = primary × 0.158987</code> (oil).</td><td>Ratio = 0.158987</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.6</td><td>HCPV column: <code>HCPV = GRV × NTG × PHI × (1−SW)</code>. Verify a spot-check row.</td><td>Consistent with input values</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.7</td><td>NTG, PHI, SW columns are raw fractions (not percentages).</td><td>Values in [0, 1]</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.8</td><td>Gas fluid: Bg column labelled <code>Bg (scf/SCF)</code>, no Rv column.</td><td>Correct header</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.9</td><td>Gas+VO fluid: both Bg and Rv columns present. Rv header = <code>Rv (bbl/scf)</code>.</td><td>Correct header (not STB/MMscf)</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.10</td><td>CSG fluid (1C inputs, 1,000 iter): Samples CSV includes CoalDensity, GasContent, CoalMass columns. CoalMass header = <code>Coal Mass (tonnes)</code>.</td><td>Correct header</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.11</td><td>CSG spot-check: <code>CoalMass = GRV(acre-ft) × CoalDensity(t/m³) × 1233.48</code>. Pick one row and verify.</td><td>Matches to 1 decimal place</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">10.12</td><td>CSG primary column: <code>primary(BCF) ≈ 43560 × GRV × CoalDensity × GasContent / 10⁹</code>. Spot-check one row.</td><td>Consistent with hand-calc</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 11 ===== -->
+<h2 id="s11">11. Parameter Correlations</h2>
+
+<p class="section-note">Enable Advanced Mode (one reservoir). Use Oil fluid. Run 20,000 iterations for reliable rank-correlation checks.</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">11.1</td><td>Apply preset <strong>"None (Independent)"</strong>. All correlation inputs = 0. Run. Spearman correlation between Porosity and NTG samples in Samples CSV ≈ 0 (within ±0.05).</td><td>|ρ(NTG, φ)| &lt; 0.05</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">11.2</td><td>Apply preset <strong>"Typical Clastic"</strong>. Run. Spearman correlation between Porosity and NTG in Samples CSV ≈ +0.5.</td><td>ρ(NTG, φ) ≈ 0.5 ± 0.1</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">11.3</td><td>Typical Clastic: Spearman ρ(φ, Sw) ≈ −0.4.</td><td>ρ(φ, Sw) ≈ −0.4 ± 0.1</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">11.4</td><td>Positive ρ(NTG, φ) = +0.5: STOIIP distribution should be wider (more variance) than the independent case, and P10 higher relative to P90 span.</td><td>P10/P90 ratio increases vs independent</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">11.5</td><td>Set ρ(NTG, φ) = 1.0 (perfect positive). Verify the matrix warning does NOT appear (valid PD). Rank correlation in samples ≈ 1.0.</td><td>No warning; ρ ≈ 1.0 in samples</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">11.6</td><td>Enter an invalid non-PD matrix (e.g. ρ(NTG,φ)=0.9, ρ(φ,Sw)=0.9, ρ(NTG,Sw)=0.9 simultaneously). Warning message appears in red.</td><td>"not positive definite" warning visible</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">11.7</td><td>With the non-PD matrix from 11.6: clicking Run still runs (correlation is silently ignored, not a hard error).</td><td>Simulation completes; results valid</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 12 ===== -->
+<h2 id="s12">12. Advanced Mode — Multi-Reservoir</h2>
+
+<p class="section-note">Toggle Advanced Mode on. Use 10,000 iterations throughout this section.</p>
+
+<h3>12A — Aggregation Arithmetic</h3>
+<table>
+  <tr><th class="id">ID</th><th>Setup</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">12A.1</td><td>Two Oil reservoirs. R1: near-deterministic (all σ → 0.001), same values as test 1A → STOIIP ≈ 1.2532 MMBO. R2: identical near-deterministic inputs. Total P50 ≈ 2 × 1.2532.</td><td class="expected">Total P50 ≈ 2.506 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">12A.2</td><td>One Oil reservoir + one Gas reservoir (same parameters as 1A/1B). Since units differ, aggregation is in MMBOE. Total Det. Mid-Case = 1.2532 MMBO_as_MMBOE + 2.1954 BCF_as_MMBOE.<br><span class="tolerance">Gas MMBOE = 2.1954 × 10⁹ / (5800 × 10⁶) = 0.3785 MMBOE. Total = 1.2532 + 0.3785</span></td><td class="expected">Total ≈ 1.6317 MMBOE</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">12A.3</td><td>Three identical near-deterministic Oil reservoirs. Total P50 ≈ 3 × 1.2532.</td><td class="expected">Total P50 ≈ 3.760 MMBO</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">12A.4</td><td>Multi-reservoir summary table shows a row per reservoir plus a bold TOTAL row.</td><td>Each reservoir row + TOTAL row present</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">12A.5</td><td>Results View dropdown: selecting an individual reservoir shows that reservoir's standalone CDF/histogram, not the aggregate.</td><td>Single-reservoir P50 ≈ 1.2532 for R1 alone</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<h3>12B — Shared Parameters</h3>
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">12B.1</td><td>Two Oil reservoirs. R2 Porosity linked = "Same as R1". Run 10,000 iter. In Samples CSV, Spearman ρ(R1.φ, R2.φ) ≈ 1.0.</td><td>ρ ≈ 1.0 (exact rank match)</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">12B.2</td><td>R2 Porosity = Independent. ρ(R1.φ, R2.φ) ≈ 0 (no link).</td><td>|ρ| &lt; 0.05</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<h3>12C — Inter-Reservoir Correlations</h3>
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">12C.1</td><td>Two Oil reservoirs. Set Area R1↔R2 correlation = 0.8. Run 20,000 iter. Spearman ρ(R1.Area, R2.Area) ≈ 0.8.</td><td>ρ ≈ 0.8 ± 0.05</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">12C.2</td><td>Two reservoirs with different fluids (Oil + Gas): inter-reservoir correlation table only shows shared parameters.</td><td>"—" shown for params not in both reservoirs</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 13 ===== -->
+<h2 id="s13">13. Project Save / Load Round-Trip</h2>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">13.1</td><td>Basic mode: Set oil fluid, custom distribution values (e.g. Area Triangular 30/50/80), run simulation. Save Project. Reload page. Load Project. Verify all distribution values, types, and results match exactly.</td><td>All inputs restored identically</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">13.2</td><td>SI unit system: set Output Unit System = SI, run, save. Reload. Load. Verify unit system = SI is restored.</td><td>Unit system persists through save/load</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">13.3</td><td>Advanced Mode with 2 reservoirs: save and reload. Verify both reservoir tabs, fluid types, distribution values, and correlation matrix are restored.</td><td>Multi-reservoir state fully restored</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">13.4</td><td>After load: click Run. Results match the pre-save run (use same seed).</td><td>Identical P90/P50/P10 values</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">13.5</td><td>GRV geometry mode: save with GRV mode and specific grvUnit selection. Verify grvUnit is restored on load.</td><td>GRV unit dropdown correct after load</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">13.6</td><td>Load a deliberately corrupted JSON file. App shows an error gracefully without crashing or leaving UI in a broken state.</td><td>Error message displayed; app still functional</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 14 ===== -->
+<h2 id="s14">14. UI Consistency &amp; Labels</h2>
+
+<table>
+  <tr><th class="id">ID</th><th>Check</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">14.1</td><td>Switch fluid to each type in turn (Oil → Gas → CSG → Oil+Gas → Gas+VO). Verify parameter rows update correctly each time.</td><td>Oil: Area,Thick,NTG,φ,Sw,Bo. Gas: same + Bg instead of Bo. CSG: Area,Thick,CoalDensity,GasContent. OilGas: adds Rs. GasVO: adds Rv.</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.2</td><td>Formula note (below results title) shows the correct formula for the active fluid and metric at all times.</td><td>Matches the documented formulas in the help manual</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.3</td><td>Results title (e.g. "Results (MMBO)") updates correctly for every fluid/metric/unit-system combination.</td><td>Always shows current unit in the heading</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.4</td><td>Tornado x-axis label matches the current result unit.</td><td>e.g. "Change from Base (MMBO)" in field mode</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.5</td><td>Distribution Preview panel updates automatically when fluid type changes (no need to click Run).</td><td>Preview plots show correct parameter set</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.6</td><td>Help modal opens on clicking the Help button, closes on X and on Escape key, and closes by clicking outside the modal.</td><td>All three close methods work</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.7</td><td>Help manual section 3 "Gas Content" unit reads <strong>m³/tonne</strong>.</td><td>Metric tonne (not short ton)</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.8</td><td>Help manual section 7 (Engine) CSG formula constant reads <strong>43,560</strong>.</td><td>Correct constant (not 48,013)</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.9</td><td>Advanced Mode: Reservoir Name field updates the tab label in real time.</td><td>Tab label changes as user types</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">14.10</td><td>Collapsible sections (details/summary elements) all expand and collapse correctly.</td><td>All sections toggle without errors</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 15 ===== -->
+<h2 id="s15">15. Input Validation &amp; Error Handling</h2>
+
+<table>
+  <tr><th class="id">ID</th><th>Invalid input</th><th>Expected behaviour</th><th class="check">P/F</th></tr>
+  <tr><td class="id">15.1</td><td>Triangular: Min &gt; Mode (e.g. Min=0.5, Mode=0.1, Max=0.8)</td><td>Red error message; simulation does not run</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">15.2</td><td>Triangular: Mode &gt; Max (e.g. Min=0.1, Mode=0.9, Max=0.5)</td><td>Red error message; simulation does not run</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">15.3</td><td>Uniform: Min &gt; Max</td><td>Red error message</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">15.4</td><td>Leave a required field blank (e.g. delete Porosity mean for Normal dist)</td><td>Error message naming the parameter and field</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">15.5</td><td>Iterations = 0</td><td>Error: "must be a positive number"</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">15.6</td><td>Iterations = −100</td><td>Error message</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">15.7</td><td>Valid inputs followed by correction: fix the invalid field and click Run. Simulation runs successfully.</td><td>Error clears; run completes</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">15.8</td><td>Advanced Mode: error in Reservoir 2 parameter. Error message names the reservoir.</td><td>e.g. "Reservoir 2: Invalid Triangular…"</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<!-- ===== SECTION 16 ===== -->
+<h2 id="s16">16. Edge Cases</h2>
+
+<table>
+  <tr><th class="id">ID</th><th>Test</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">16.1</td><td>Single iteration (Iterations = 1). Run completes; plots show a single point; P90 = P50 = P10 = the single value.</td><td>No crash; valid results</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.2</td><td>Very high iterations (100,000). Run completes in a reasonable time (&lt; 30 seconds). No browser crash or memory error.</td><td>Completes without error</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.3</td><td>All parameters set to Discrete with a single value (deterministic). P90 = P50 = P10 = the computed deterministic volume.</td><td>Three identical P-values</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.4</td><td>Bo = 1.0 (minimum value). STOIIP formula gives maximum value for that scenario; no division error.</td><td>Valid finite result</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.5</td><td>Bg very small (e.g. 0.0001). GIIP formula gives very large BCF value. No Infinity or NaN in results.</td><td>Finite result, possibly very large</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.6</td><td>NTG = 1.0 (no constraint violation). Simulation runs normally.</td><td>Valid results; NTG sampled correctly at or near 1.0</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.7</td><td>Sw = 0.0 (all hydrocarbon pore space). STOIIP = maximum. No error.</td><td>Valid finite result</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.8</td><td>Advanced Mode: remove a reservoir until only 1 remains. Minimum tab count = 1; delete button not available.</td><td>Cannot reduce below 1 reservoir</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.9</td><td>Advanced Mode: add reservoirs until the maximum (5). No additional Add button or a disabled button should appear.</td><td>Maximum 5 reservoirs enforced</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">16.10</td><td>Seeded RNG: seed = "0" (explicit zero). Results are reproducible (same numbers on two runs).</td><td>Exact repeat</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<div style="margin-top:32px; padding:12px 16px; background:#f0f4ff; border:1px solid #c7d2fe; border-radius:4px; font-size:12px">
+  <strong>Sign-off</strong><br><br>
+  All items checked: <span class="pass-box"></span> &nbsp; Defects raised: ________ &nbsp; Defects resolved: ________<br><br>
+  Tester signature: _________________________ &nbsp; Date: _____________<br><br>
+  Reviewer signature: _________________________ &nbsp; Date: _____________<br><br>
+  <strong>Result: </strong> <span style="font-size:14px">□ PASS &nbsp;&nbsp; □ PASS WITH MINOR DEVIATIONS (document) &nbsp;&nbsp; □ FAIL</span>
+</div>
+
+</body>
+</html>
