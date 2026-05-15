@@ -274,7 +274,7 @@ function computeVolumeSingle(fluid, metric, AH, params) {
     case 'gas':
       return (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / gasFactor;
     case 'csg':
-      return (48013 * AH * params['Coal Density'] * params['Gas Content']) / gasFactor;
+      return (43560 * AH * params['Coal Density'] * params['Gas Content']) / gasFactor;
     case 'oilgas': {
       const stoiip = (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / oilFactor;
       const giipBCF = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / gasFactor;
@@ -1140,7 +1140,7 @@ function generateSamplesCSV() {
     // ---- Geometric intermediates ----
     if (fluid === 'csg') {
       if (geomMode !== 'grv') headers.push('GRV (acre-ft)', 'GRV (m³)');
-      headers.push('Coal Mass (short tons)');
+      headers.push('Coal Mass (tonnes)');
     } else {
       if (geomMode !== 'grv') headers.push('GRV (acre-ft)', 'GRV (m³)');
       headers.push('NRV (acre-ft)', 'NRV (m³)', 'PV (acre-ft)', 'PV (m³)', 'HCPV (acre-ft)', 'HCPV (m³)');
@@ -1214,7 +1214,7 @@ function generateSamplesCSV() {
         const rec  = ip * row.RF;
         values.push(ip.toFixed(3), (ip * CSV_GAS_TO_SI).toFixed(4), rec.toFixed(3), (rec * CSV_GAS_TO_SI).toFixed(4));
       } else if (fluid === 'csg') {
-        const ip   = (48013 * grv * row.CoalDensity * row.GasContent) / 1e9;
+        const ip   = (43560 * grv * row.CoalDensity * row.GasContent) / 1e9;
         const rec  = ip * row.RF;
         values.push(ip.toFixed(3), (ip * CSV_GAS_TO_SI).toFixed(4), rec.toFixed(3), (rec * CSV_GAS_TO_SI).toFixed(4));
       } else if (fluid === 'oilgas') {
@@ -2283,7 +2283,7 @@ function buildMultiSamplesData(perReservoir, iters) {
     else if (r.samples['Bg']) row.FVF = r.samples['Bg'][i];
     if (r.samples['Rs']) row.Rs = r.samples['Rs'][i];
     if (r.samples['Rv']) row.Rv = r.samples['Rv'][i];
-    if (r.samples['Coal Density']) { row.CoalDensity = r.samples['Coal Density'][i]; row.GasContent = r.samples['Gas Content'][i]; row.CoalMass = (row.GRV || 0) * row.CoalDensity * 1359.7; }
+    if (r.samples['Coal Density']) { row.CoalDensity = r.samples['Coal Density'][i]; row.GasContent = r.samples['Gas Content'][i]; row.CoalMass = (row.GRV || 0) * row.CoalDensity * 1233.48; }
     if (row.NTG) row.HCPV = (row.GRV || 0) * row.NTG * row.PHI * (1 - row.SW);
     data.push(row);
   }
@@ -2375,7 +2375,7 @@ function runSimulation() {
     else if (samples['Bg']) row.FVF = samples['Bg'][i];
     if (samples['Rs']) row.Rs = samples['Rs'][i];
     if (samples['Rv']) row.Rv = samples['Rv'][i];
-    if (samples['Coal Density']) { row.CoalDensity = samples['Coal Density'][i]; row.GasContent = samples['Gas Content'][i]; row.CoalMass = (row.GRV || 0) * row.CoalDensity * 1359.7; }
+    if (samples['Coal Density']) { row.CoalDensity = samples['Coal Density'][i]; row.GasContent = samples['Gas Content'][i]; row.CoalMass = (row.GRV || 0) * row.CoalDensity * 1233.48; }
     if (row.NTG) row.HCPV = (row.GRV || 0) * row.NTG * row.PHI * (1 - row.SW);
     samplesData.push(row);
   }
