@@ -321,25 +321,12 @@
             <select id="thicknessUnit"><option value="ft">ft</option><option value="m">m</option></select>
             <div class="note">Converted internally to feet</div>
 
-            <label for="oilOutputUnit">Oil output units</label>
-            <select id="oilOutputUnit">
-              <option value="MMBO" selected>MMBO (Million Barrels)</option>
-              <option value="MBO">MBO (Thousand Barrels)</option>
-              <option value="STB">STB (Stock Tank Barrels)</option>
+            <label for="unitSystem">Unit system</label>
+            <select id="unitSystem">
+              <option value="field" selected>Field (MMBO / BCF)</option>
+              <option value="si">SI (MMSm³ / GSm³)</option>
             </select>
-            <div class="note">Display units for oil volumes</div>
-
-            <label for="gasOutputUnit">Gas output units</label>
-            <select id="gasOutputUnit">
-              <option value="BCF" selected>BCF (Billion Cubic Feet)</option>
-              <option value="TCF">TCF (Trillion Cubic Feet)</option>
-              <option value="MMCF">MMCF (Million Cubic Feet)</option>
-              <option value="MCF">MCF (Thousand Cubic Feet)</option>
-              <option value="SCF">SCF (Standard Cubic Feet)</option>
-              <option value="BCM">BCM (Billion Cubic Meters)</option>
-              <option value="MCM">MCM (Million Cubic Meters)</option>
-            </select>
-            <div class="note">Display units for gas volumes</div>
+            <div class="note">Field: MMBO, BCF &mdash; SI: MMSm³, GSm³. Also updates area &amp; thickness units.</div>
           </div>
         </div>
       </details>

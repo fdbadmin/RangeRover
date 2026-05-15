@@ -25,26 +25,18 @@ const GRV_FACTORS = {
   'm^3': (1e6 / 1233.48184)
 };
 
-/* Output unit conversion factors (relative to base units: STB for oil, SCF for gas) */
-const OIL_OUTPUT_FACTORS = {
-  'MMBO': 1e6,      // Million barrels (default)
-  'MBO': 1e3,       // Thousand barrels
-  'STB': 1,         // Stock tank barrels
-  'MMSTB': 1e6      // Million stock tank barrels (same as MMBO)
+/* Output unit system: field (MMBO / BCF) or SI (MMSm³ / GSm³)
+   Factors divide raw values (STB, SCF) to the display unit. */
+const OUTPUT_UNITS = {
+  field: {
+    oil: { label: 'MMBO',  factor: 1e6              },   // STB  → MMBO
+    gas: { label: 'BCF',   factor: 1e9              }    // SCF  → BCF
+  },
+  si: {
+    oil: { label: 'MMSm³', factor: 1e6 / 0.158987   },   // STB  → MMSm³  (1 bbl = 0.158987 m³)
+    gas: { label: 'GSm³',  factor: 1e9 / 0.0283168  }    // SCF  → GSm³   (1 SCF = 0.0283168 m³)
+  }
 };
-
-const GAS_OUTPUT_FACTORS = {
-  'BCF': 1e9,       // Billion cubic feet (default)
-  'TCF': 1e12,      // Trillion cubic feet
-  'MCF': 1e3,       // Thousand cubic feet
-  'SCF': 1,         // Standard cubic feet
-  'MMCF': 1e6,      // Million cubic feet
-  'BCM': 3.531e10,  // Billion cubic meters (1 BCM ≈ 35.31 BCF)
-  'MCM': 3.531e4    // Million cubic meters
-};
-
-/* Gas-to-oil equivalence factor (1 BOE = 5,800 SCF) */
-const BOE_CONVERSION = 5800;
 
 /* ===== 3. FLUID CONFIGS ===== */
 function geometryMode() {
@@ -201,26 +193,13 @@ const THICK = document.getElementById('thicknessUnit');
 let GRV_UNIT = null;
 let PARAMS = paramsFor('oil');
 
-/* Get selected output units */
-function getOilOutputUnit() {
-  const sel = document.getElementById('oilOutputUnit');
-  return sel ? sel.value : 'MMBO';
+/* Unit system helpers */
+function getUnitSystem() {
+  const sel = document.getElementById('unitSystem');
+  return (sel && sel.value === 'si') ? 'si' : 'field';
 }
-
-function getGasOutputUnit() {
-  const sel = document.getElementById('gasOutputUnit');
-  return sel ? sel.value : 'BCF';
-}
-
-function getOilOutputUnitText() {
-  const sel = document.getElementById('oilOutputUnit');
-  return sel ? sel.options[sel.selectedIndex].text : 'MMBO';
-}
-
-function getGasOutputUnitText() {
-  const sel = document.getElementById('gasOutputUnit');
-  return sel ? sel.options[sel.selectedIndex].text : 'BCF';
-}
+function getOilOutputUnitText() { return OUTPUT_UNITS[getUnitSystem()].oil.label; }
+function getGasOutputUnitText() { return OUTPUT_UNITS[getUnitSystem()].gas.label; }
 
 const DIST_LABELS = {
   "Discrete": ["Value 1", "Value 2", "Value 3"],
@@ -281,8 +260,9 @@ function computeVolumeSingle(fluid, metric, AH, params) {
   const SW = params['Water Saturation'];
   
   // Get output unit factors
-  const oilFactor = OIL_OUTPUT_FACTORS[getOilOutputUnit()] || OIL_OUTPUT_FACTORS['MMBO'];
-  const gasFactor = GAS_OUTPUT_FACTORS[getGasOutputUnit()] || GAS_OUTPUT_FACTORS['BCF'];
+  const sys = getUnitSystem();
+  const oilFactor = OUTPUT_UNITS[sys].oil.factor;
+  const gasFactor = OUTPUT_UNITS[sys].gas.factor;
   
   switch (fluid) {
     case 'oil':
@@ -312,34 +292,22 @@ function computeVolumeSingle(fluid, metric, AH, params) {
 }
 
 function volumeToMBOE(value, fluid, metric) {
-  // Convert from current output units to MMBOE
-  const oilFactor = OIL_OUTPUT_FACTORS[getOilOutputUnit()] || OIL_OUTPUT_FACTORS['MMBO'];
-  const gasFactor = GAS_OUTPUT_FACTORS[getGasOutputUnit()] || GAS_OUTPUT_FACTORS['BCF'];
+  // Convert from display units back to field MMBOE (for cross-reservoir aggregation)
+  const sys = getUnitSystem();
+  const oilFactor = OUTPUT_UNITS[sys].oil.factor;
+  const gasFactor = OUTPUT_UNITS[sys].gas.factor;
   
-  if (fluid === 'oil') {
-    // Convert oil from selected unit to MMBO (which equals MMBOE for oil)
-    return value * oilFactor / OIL_OUTPUT_FACTORS['MMBO'];
-  }
-  if (fluid === 'gas' || fluid === 'csg') {
-    // Convert gas from selected unit to SCF, then to MMBOE
-    const scf = value * gasFactor;
-    return scf / (BOE_CONVERSION * OIL_OUTPUT_FACTORS['MMBO']);
-  }
+  if (fluid === 'oil') return value * oilFactor / 1e6;
+  if (fluid === 'gas' || fluid === 'csg') return value * gasFactor / (5800 * 1e6);
   if (fluid === 'oilgas') {
-    if (metric === 'stoiip') return value * oilFactor / OIL_OUTPUT_FACTORS['MMBO'];
-    if (metric === 'giip') {
-      const scf = value * gasFactor;
-      return scf / (BOE_CONVERSION * OIL_OUTPUT_FACTORS['MMBO']);
-    }
-    return value; // total already in BOE
+    if (metric === 'stoiip') return value * oilFactor / 1e6;
+    if (metric === 'giip')   return value * gasFactor / (5800 * 1e6);
+    return value * oilFactor / 1e6;  // total expressed in oil-display-unit BOE equiv
   }
   if (fluid === 'gasvo') {
-    if (metric === 'giip') {
-      const scf = value * gasFactor;
-      return scf / (BOE_CONVERSION * OIL_OUTPUT_FACTORS['MMBO']);
-    }
-    if (metric === 'vo') return value * oilFactor / OIL_OUTPUT_FACTORS['MMBO'];
-    return value; // total already in BOE
+    if (metric === 'giip') return value * gasFactor / (5800 * 1e6);
+    if (metric === 'vo')   return value * oilFactor / 1e6;
+    return value * oilFactor / 1e6;  // total expressed in oil-display-unit BOE equiv
   }
   return value;
 }
@@ -1314,12 +1282,16 @@ AREA.addEventListener('change', renderDistPreviewsDebounced);
 THICK.addEventListener('change', renderDistPreviewsDebounced);
 document.addEventListener('change', (e) => { if (e.target && e.target.id === 'grvUnit') renderDistPreviewsDebounced(); });
 
-/* Output unit change listeners - rerun simulation if results exist */
+/* Unit system change: sync input units then rerun */
 document.addEventListener('change', (e) => {
-  if (e.target && (e.target.id === 'oilOutputUnit' || e.target.id === 'gasOutputUnit')) {
-    if (lastSim || lastMultiResults) {
-      runSimulation();
-    }
+  if (e.target && e.target.id === 'unitSystem') {
+    const si = e.target.value === 'si';
+    const areaEl  = document.getElementById('areaUnit');
+    const thickEl = document.getElementById('thicknessUnit');
+    if (areaEl)  areaEl.value  = si ? 'km2'   : 'acres';
+    if (thickEl) thickEl.value = si ? 'm'     : 'ft';
+    if (lastSim || lastMultiResults) runSimulation();
+    else renderDistPreviewsDebounced();
   }
 });
 
