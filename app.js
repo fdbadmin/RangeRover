@@ -79,11 +79,12 @@ function labelsFor(fluid) {
     };
   }
   if (fluid === 'gasvo') {
+    const boeUnitGVO = getUnitSystem() === 'si' ? 'MMSm³ oe' : 'MMBOE';
     return { 
       primary: "GIIP", unit: gasUnit, 
       xMain: `GIIP (${gasUnit})`, xRec: `Recoverable (${gasUnit})`,
       cdfTitle: "GIIP CDF", histTitle: "GIIP Histogram", metricRec: "Recoverable GIIP",
-      formula: `Formula (Gas + Vaporized Oil): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in ${gasUnit}). Vaporized oil from gas cap: <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in ${oilUnit}). Total MMBOE = GIIP(MMBOE) + VO(MMBO).`
+      formula: `Formula (Gas + Vaporized Oil): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in ${gasUnit}). Vaporized oil from gas cap: <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in ${oilUnit}). Total ${boeUnitGVO} = GIIP(${boeUnitGVO}) + VO(${oilUnit}).`
     };
   }
   return { 
@@ -177,6 +178,7 @@ function boundsFor(name, fluid) {
   if (isFrac(name)) return { min: 0, max: 1 };
   if (name === 'Bo') return { min: 1.0, max: Infinity };
   if (name === 'Bg') return { min: 1e-9, max: Infinity };
+  if (name === 'Rs') return { min: 0, max: Infinity };
   if (name === 'Rv') return { min: 0, max: Infinity };
   if (name === 'Coal Density') return { min: 0.1, max: Infinity };
   if (name === 'Gas Content') return { min: 0, max: Infinity };
@@ -817,6 +819,7 @@ function downloadCSV(filename, content) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 /* ===== PROJECT SAVE / LOAD ===== */
@@ -835,6 +838,7 @@ function serializeProject() {
       nbins: document.getElementById('nbins').value,
       areaUnit: document.getElementById('areaUnit').value,
       thicknessUnit: document.getElementById('thicknessUnit').value,
+      unitSystem: document.getElementById('unitSystem').value,
       geometryMode: geometryMode(),
       grvUnit: (function() { const el = document.getElementById('grvUnit'); return el ? el.value : null; })()
     },
@@ -889,6 +893,7 @@ function deserializeProject(project) {
     if (s.nbins) document.getElementById('nbins').value = s.nbins;
     if (s.areaUnit) document.getElementById('areaUnit').value = s.areaUnit;
     if (s.thicknessUnit) document.getElementById('thicknessUnit').value = s.thicknessUnit;
+    if (s.unitSystem) document.getElementById('unitSystem').value = s.unitSystem;
 
     // Geometry mode
     if (s.geometryMode) {
@@ -1129,13 +1134,13 @@ function generateSamplesCSV() {
       headers.push('Net to Gross (frac)', 'Porosity (frac)', 'Water Saturation (frac)');
     }
     if (fluid === 'oil' || fluid === 'oilgas') { headers.push('Bo (RB/STB)'); if (fluid === 'oilgas') headers.push('Rs (scf/STB)'); }
-    else if (fluid === 'gas' || fluid === 'gasvo') { headers.push('Bg (scf/SCF)'); if (fluid === 'gasvo') headers.push('Rv (STB/MMscf)'); }
+    else if (fluid === 'gas' || fluid === 'gasvo') { headers.push('Bg (scf/SCF)'); if (fluid === 'gasvo') headers.push('Rv (bbl/scf)'); }
     headers.push('Recovery Factor (frac)');
 
     // ---- Geometric intermediates ----
     if (fluid === 'csg') {
       if (geomMode !== 'grv') headers.push('GRV (acre-ft)', 'GRV (m³)');
-      headers.push('Coal Mass (tons)');
+      headers.push('Coal Mass (short tons)');
     } else {
       if (geomMode !== 'grv') headers.push('GRV (acre-ft)', 'GRV (m³)');
       headers.push('NRV (acre-ft)', 'NRV (m³)', 'PV (acre-ft)', 'PV (m³)', 'HCPV (acre-ft)', 'HCPV (m³)');
@@ -1348,9 +1353,12 @@ function mountResultsTypeSelector() {
   if (FLUID.value === 'oilgas' || FLUID.value === 'gasvo') {
     const label = document.createElement('label'); label.textContent = 'Results Metric'; label.setAttribute('for', 'resultType');
     const sel = document.createElement('select'); sel.id = 'resultType';
+    const _oilUT = getOilOutputUnitText();
+    const _gasUT = getGasOutputUnitText();
+    const _boeUT = getUnitSystem() === 'si' ? 'MMSm³ oe' : 'MMBOE';
     sel.innerHTML = FLUID.value === 'oilgas'
-      ? '<option value="stoiip">STOIIP (MMBO)</option><option value="giip">GIIP (BCF)</option><option value="total" selected>Total (MMBOE)</option>'
-      : '<option value="giip">GIIP (BCF)</option><option value="vo">Vaporized Oil (MMBO)</option><option value="total" selected>Total (MMBOE)</option>';
+      ? `<option value="stoiip">STOIIP (${_oilUT})</option><option value="giip">GIIP (${_gasUT})</option><option value="total" selected>Total (${_boeUT})</option>`
+      : `<option value="giip">GIIP (${_gasUT})</option><option value="vo">Vaporized Oil (${_oilUT})</option><option value="total" selected>Total (${_boeUT})</option>`;
     const thickUnit = document.getElementById('thicknessUnit');
     let insertAfter = thickUnit;
     if (thickUnit) { let next = thickUnit.nextElementSibling; if (next && next.classList.contains('note')) insertAfter = next; }
@@ -1443,7 +1451,8 @@ document.addEventListener('change', (e) => {
     const thickEl = document.getElementById('thicknessUnit');
     if (areaEl)  areaEl.value  = si ? 'km2'   : 'acres';
     if (thickEl) thickEl.value = si ? 'm'     : 'ft';
-    if (lastSim || lastMultiResults) runSimulation();
+    mountResultsTypeSelector();
+    if (lastSimulationData || lastMultiResults) runSimulation();
     else renderDistPreviewsDebounced();
   }
 });
@@ -2375,7 +2384,7 @@ function runSimulation() {
     P90: stats.P90, P50: stats.P50, P10: stats.P10,
     RP90: stats.RP90, RP50: stats.RP50, RP10: stats.RP10,
     detMidCase, detRecMidCase, pValMain: stats.pValMain, pValRec: stats.pValRec,
-    labelSet, fluid, samplesData
+    labelSet, fluid, metric, samplesData
   };
 
   document.getElementById('downloadCsv').disabled = false;
