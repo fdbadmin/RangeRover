@@ -321,12 +321,12 @@
             <select id="thicknessUnit"><option value="ft">ft</option><option value="m">m</option></select>
             <div class="note">Converted internally to feet</div>
 
-            <label for="unitSystem">Unit system</label>
+            <label for="unitSystem">Output unit system</label>
             <select id="unitSystem">
               <option value="field" selected>Field (MMBO / BCF)</option>
               <option value="si">SI (MMSm³ / GSm³)</option>
             </select>
-            <div class="note">Field: MMBO, BCF &mdash; SI: MMSm³, GSm³. Also updates area &amp; thickness units.</div>
+            <div class="note">Controls result units: oil in MMBO or MMSm³, gas in BCF or GSm³. Also switches area to km² and thickness to m.</div>
           </div>
         </div>
       </details>
@@ -532,8 +532,12 @@
         <li><b>Rs</b> (scf/bbl): Solution gas&#8211;oil ratio (Oil + Solution Gas fluid only).</li>
         <li><b>Rv</b> (bbl/scf): Vaporized oil&#8211;gas ratio (Gas + Vaporized Oil fluid only).</li>
         <li><b>Coal Density</b> (g/cm&#179;): Typically 1.3&#8211;1.5 (Coal Seam Gas only).</li>
-        <li><b>Gas Content</b> (m&#179;/ton): Gas adsorbed per ton of coal (Coal Seam Gas only).</li>
+        <li><b>Gas Content</b> (m&#179;/tonne): Gas adsorbed per metric tonne (1,000&nbsp;kg) of coal (Coal Seam Gas only).</li>
         <li><b>Recovery Factor</b>: fraction (0&#8211;1). Multiplies in&#8209;place volumes to give recoverable volumes.</li>
+        <li><b>Output Unit System:</b> selectable in Simulation Settings.<ul>
+          <li><b>Field</b> (default): oil in MMBO, gas in BCF, total in MMBOE.</li>
+          <li><b>SI</b>: oil in MMSm&#179;, gas in GSm&#179;, total in MMSm&#179;&nbsp;oe. Also switches area input to km&#178; and thickness to m.</li>
+        </ul></li>
       </ul>
 
       <h3 id="geometry">4) Geometry Modes</h3>
@@ -570,7 +574,7 @@
       <ul>
         <li><b>Oil (STOIIP):</b> <code>7,758 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bo</code> &#8594; MMBO</li>
         <li><b>Gas (GIIP):</b> <code>43,560 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bg</code> &#8594; BCF</li>
-        <li><b>Coal Seam Gas (GIIP):</b> <code>48,013 &#215; A &#215; h &#215; &#961;<sub>coal</sub> &#215; G<sub>c</sub></code> &#8594; BCF</li>
+        <li><b>Coal Seam Gas (GIIP):</b> <code>43,560 &#215; A &#215; h &#215; &#961;<sub>coal</sub> &#215; G<sub>c</sub></code> &#8594; BCF &nbsp;(&#961;<sub>coal</sub> in t/m&#179;, G<sub>c</sub> in m&#179;/t)</li>
         <li><b>Oil + Solution Gas:</b> STOIIP and Solution Gas GIIP computed simultaneously (see Dual&#8209;Phase section).</li>
         <li><b>Gas + Vaporized Oil:</b> GIIP and Vaporized Oil computed simultaneously (see Dual&#8209;Phase section).</li>
       </ul>
@@ -587,7 +591,7 @@
       </ul>
 
       <h3 id="dualphase">9) Dual&#8209;Phase Fluids</h3>
-      <p>When <b>Oil + Solution Gas</b> or <b>Gas + Vaporized Oil</b> is selected, a <b>Results Metric</b> dropdown appears:</p>
+      <p>When <b>Oil + Solution Gas</b> or <b>Gas + Vaporized Oil</b> is selected, a <b>Results Metric</b> dropdown appears. Unit labels in the dropdown and results adapt automatically to the selected output unit system (Field or SI):</p>
       <ul>
         <li><b>Oil + Solution Gas:</b>
           <ul>
@@ -692,9 +696,11 @@
         <li><b>Rs</b>: Solution gas&#8211;oil ratio (scf/bbl).</li>
         <li><b>Rv</b>: Vaporized oil&#8211;gas ratio (bbl/scf).</li>
         <li><b>GRV</b>: Gross Rock Volume &#8212; the product of Area &#215; Thickness when entered directly.</li>
-        <li><b>STOIIP</b>: Stock&#8209;Tank Original Oil In Place (MMBO).</li>
-        <li><b>GIIP</b>: Gas Initially In Place (BCF).</li>
-        <li><b>MMBOE</b>: Millions of Barrels of Oil Equivalent (1 BCF &#8776; 1/5.8 MMBOE).</li>
+        <li><b>STOIIP</b>: Stock&#8209;Tank Original Oil In Place (MMBO in field units; MMSm&#179; in SI).</li>
+        <li><b>GIIP</b>: Gas Initially In Place (BCF in field units; GSm&#179; in SI).</li>
+        <li><b>MMBOE</b>: Millions of Barrels of Oil Equivalent (1 BCF &#8776; 1/5.8 MMBOE). SI equivalent: MMSm&#179;&nbsp;oe.</li>
+        <li><b>MMSm&#179;</b>: Millions of Standard Cubic Metres (oil equivalent of MMBO; 1 MMSm&#179; &#8776; 6.29 MMBO).</li>
+        <li><b>GSm&#179;</b>: Giga Standard Cubic Metres (gas equivalent of BCF; 1 GSm&#179; &#8776; 35.3 BCF).</li>
         <li><b>PERT</b>: Beta&#8209;PERT distribution (&#955; = 4); smoother alternative to Triangular.</li>
         <li><b>Iman&#8209;Conover</b>: Rank&#8209;based method for imposing a target Spearman correlation structure on independently sampled distributions.</li>
         <li><b>Spearman &#961;</b>: Rank correlation coefficient, &#8722;1 to +1. Measures monotonic (not necessarily linear) association.</li>

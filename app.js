@@ -1421,6 +1421,7 @@ function prefillDefaults() {
   if (FLUID.value === 'gas') D = { "Area": [50, 10], "Thickness": [60, 10], "Net to Gross": [0.6, 0.15], "Porosity": [0.2, 0.05], "Water Saturation": [0.3, 0.1], "Bg": [0.005, 0.001], "__RF": [0.5, 0.05] };
   else if (FLUID.value === 'oilgas') D = { "Area": [50, 10], "Thickness": [50, 10], "Net to Gross": [0.6, 0.2], "Porosity": [0.2, 0.05], "Water Saturation": [0.3, 0.1], "Bo": [1.3, 0.1], "Rs": [800, 100], "__RF": [0.5, 0.05] };
   else if (FLUID.value === 'gasvo') D = { "Area": [50, 10], "Thickness": [60, 10], "Net to Gross": [0.6, 0.15], "Porosity": [0.2, 0.05], "Water Saturation": [0.3, 0.1], "Bg": [0.005, 0.001], "Rv": [0.001, 0.0002], "__RF": [0.5, 0.05] };
+  else if (FLUID.value === 'csg') D = { "Area": [50, 10], "Thickness": [5, 1], "Coal Density": [1.4, 0.1], "Gas Content": [15, 3], "__RF": [0.5, 0.05] };
   else D = { "Area": [50, 10], "Thickness": [50, 10], "Net to Gross": [0.6, 0.2], "Porosity": [0.2, 0.05], "Water Saturation": [0.3, 0.1], "Bo": [1.3, 0.1], "__RF": [0.5, 0.05] };
   document.querySelectorAll('#params .dist-row').forEach(row => {
     const name = row.getAttribute('data-param'); const pair = D[name]; const sel = row.querySelector('.dist-type'); sel.value = 'Normal';
