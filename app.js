@@ -106,11 +106,12 @@ function labelsForFluidMetric(fluid, metric) {
       cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
       formula: `Formula (Solution Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF; plots in ${gasUnit}).`
     };
+    const totalUnitOG = getUnitSystem() === 'si' ? 'MMSm³ oe' : 'MMBOE';
     return {
-      primary: 'Total MMBOE', unit: 'MMBOE', 
-      xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
-      cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
-      formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
+      primary: `Total ${totalUnitOG}`, unit: totalUnitOG,
+      xMain: `Total (${totalUnitOG})`, xRec: `Recoverable (${totalUnitOG})`,
+      cdfTitle: `Total ${totalUnitOG} CDF`, histTitle: `Total ${totalUnitOG} Histogram`, metricRec: `Recoverable ${totalUnitOG}`,
+      formula: `Formula (Total): <code>Total ${totalUnitOG} = STOIIP + GIIP</code> (plots in ${totalUnitOG}).`
     };
   }
   if (fluid === 'gasvo') {
@@ -121,11 +122,12 @@ function labelsForFluidMetric(fluid, metric) {
       cdfTitle: 'Vaporized Oil CDF', histTitle: 'Vaporized Oil Histogram', metricRec: 'Recoverable Vaporized Oil',
       formula: `Formula (Vaporized Oil): <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in ${oilUnit}).`
     };
+    const totalUnitGVO = getUnitSystem() === 'si' ? 'MMSm³ oe' : 'MMBOE';
     return {
-      primary: 'Total MMBOE', unit: 'MMBOE', 
-      xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
-      cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
-      formula: 'Formula (Total): <code>Total MMBOE = GIIP(MMBOE) + Vaporized Oil (MMBO)</code>.'
+      primary: `Total ${totalUnitGVO}`, unit: totalUnitGVO,
+      xMain: `Total (${totalUnitGVO})`, xRec: `Recoverable (${totalUnitGVO})`,
+      cdfTitle: `Total ${totalUnitGVO} CDF`, histTitle: `Total ${totalUnitGVO} Histogram`, metricRec: `Recoverable ${totalUnitGVO}`,
+      formula: `Formula (Total): <code>Total ${totalUnitGVO} = GIIP(${totalUnitGVO}) + Vaporized Oil (${oilUnit})</code>.`
     };
   }
   return labelsFor(fluid);
@@ -274,14 +276,14 @@ function computeVolumeSingle(fluid, metric, AH, params) {
     case 'oilgas': {
       const stoiip = (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / oilFactor;
       const giipBCF = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / gasFactor;
-      const giipBOE = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / (BOE_CONVERSION * oilFactor);
+      const giipBOE = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / (5800 * oilFactor);
       if (metric === 'stoiip') return stoiip;
       if (metric === 'giip') return giipBCF;
       return stoiip + giipBOE;
     }
     case 'gasvo': {
       const giip = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / gasFactor;
-      const giipBOE = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / (BOE_CONVERSION * oilFactor);
+      const giipBOE = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / (5800 * oilFactor);
       const vo = (43560 * AH * NTG * PHI * (1 - SW) * params['Rv'] / params['Bg']) / oilFactor;
       if (metric === 'giip') return giip;
       if (metric === 'vo') return vo;
@@ -513,12 +515,15 @@ function computeSubComponents(fluid, samples, dists, useGRV, rfType, rfRaw, rfPe
   const n = samples['Recovery Factor'].length;
   const RF = samples['Recovery Factor'];
   const metrics = fluid === 'oilgas' ? ['stoiip', 'giip', 'total'] : ['giip', 'vo', 'total'];
+  const oilUnitSC = getOilOutputUnitText();
+  const gasUnitSC = getGasOutputUnitText();
+  const totalUnitSC = getUnitSystem() === 'si' ? 'MMSm³ oe' : 'MMBOE';
   const labels = fluid === 'oilgas'
-    ? { stoiip: 'STOIIP (MMBO)', giip: 'Solution Gas (BCF)', total: 'Total (MMBOE)' }
-    : { giip: 'GIIP (BCF)', vo: 'Vaporized Oil (MMBO)', total: 'Total (MMBOE)' };
+    ? { stoiip: `STOIIP (${oilUnitSC})`, giip: `Solution Gas (${gasUnitSC})`, total: `Total (${totalUnitSC})` }
+    : { giip: `GIIP (${gasUnitSC})`, vo: `Vaporized Oil (${oilUnitSC})`, total: `Total (${totalUnitSC})` };
   const recLabels = fluid === 'oilgas'
-    ? { stoiip: 'Rec. STOIIP (MMBO)', giip: 'Rec. Solution Gas (BCF)', total: 'Rec. Total (MMBOE)' }
-    : { giip: 'Rec. GIIP (BCF)', vo: 'Rec. Vaporized Oil (MMBO)', total: 'Rec. Total (MMBOE)' };
+    ? { stoiip: `Rec. STOIIP (${oilUnitSC})`, giip: `Rec. Solution Gas (${gasUnitSC})`, total: `Rec. Total (${totalUnitSC})` }
+    : { giip: `Rec. GIIP (${gasUnitSC})`, vo: `Rec. Vaporized Oil (${oilUnitSC})`, total: `Rec. Total (${totalUnitSC})` };
   const rows = [];
   const detParams = {};
   for (const d of dists) detParams[d.name] = mostLikely(d.type, d.v, d.wPerc);
@@ -2163,7 +2168,7 @@ function runMultiReservoirSimulation() {
   }
 
   const totalLabelSet = {
-    primary: `Total ${totalUnit === 'MMBOE' ? 'MMBOE' : perReservoir[0].labelSet.primary}`,
+    primary: `Total ${totalUnit}`,
     unit: totalUnit,
     xMain: `Total (${totalUnit})`, xRec: `Recoverable (${totalUnit})`,
     cdfTitle: `Total ${totalUnit} CDF`, histTitle: `Total ${totalUnit} Histogram`,
