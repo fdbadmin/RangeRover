@@ -999,34 +999,98 @@ function handleProjectFileSelect(e) {
   reader.readAsText(file);
 }
 
+/* ---- CSV unit helpers ---- */
+const CSV_OIL_TO_SI  = 0.158987;   // MMBO  → MMSm³
+const CSV_GAS_TO_SI  = 0.0283168;  // BCF   → GSm³
+
+/* Determine whether a fluid+metric combo is oil, gas, or BOE */
+function csvUnitType(fluid, metric) {
+  if (fluid === 'oil') return 'oil';
+  if (fluid === 'gas' || fluid === 'csg') return 'gas';
+  if (fluid === 'oilgas') {
+    if (metric === 'stoiip') return 'oil';
+    if (metric === 'giip')   return 'gas';
+    return 'boe';
+  }
+  if (fluid === 'gasvo') {
+    if (metric === 'giip') return 'gas';
+    if (metric === 'vo')   return 'oil';
+    return 'boe';
+  }
+  return 'boe';
+}
+
+/* Convert a value from the current display unit to the canonical field base (MMBO or BCF) */
+function toFieldBase(v, unitType) {
+  if (!Number.isFinite(v) || unitType === 'boe') return v;
+  if (getUnitSystem() === 'si') {
+    if (unitType === 'oil') return v / CSV_OIL_TO_SI;
+    if (unitType === 'gas') return v / CSV_GAS_TO_SI;
+  }
+  return v;
+}
+
+/* Return field label, SI label, and SI conversion factor for a unit type */
+function csvUnitMeta(unitType) {
+  if (unitType === 'oil') return { field: 'MMBO',  si: 'MMSm³', conv: CSV_OIL_TO_SI };
+  if (unitType === 'gas') return { field: 'BCF',   si: 'GSm³',  conv: CSV_GAS_TO_SI };
+  return { field: 'MMBOE', si: null, conv: null };
+}
+
 function generateSummaryCSV() {
   if (!lastSimulationData) return;
-  const { P90, P50, P10, RP90, RP50, RP10, detMidCase, detRecMidCase, pValMain, pValRec, labelSet } = lastSimulationData;
+  const { P90, P50, P10, RP90, RP50, RP10, detMidCase, detRecMidCase, pValMain, pValRec, labelSet, fluid } = lastSimulationData;
   const fluidDisplayName = { oil: 'Oil', gas: 'Gas', csg: 'Coal Seam Gas', oilgas: 'Oil + Solution Gas', gasvo: 'Gas + Vaporized Oil' };
-  let csv = `RangeRover Summary Report\n`;
-  csv += `Metric,${labelSet.primary}\nUnit,${labelSet.unit}\n\n`;
-  csv += `In-Place Volume\nStatistic,Value (${labelSet.unit})\n`;
-  csv += `P90,${P90.toFixed(2)}\nP50,${P50.toFixed(2)}\nP10,${P10.toFixed(2)}\n`;
-  csv += `Deterministic Mid Case,${detMidCase.toFixed(2)}${pValMain ? ` (P${pValMain})` : ''}\n\n`;
-  csv += `Recoverable Volume\nStatistic,Value (${labelSet.unit})\n`;
-  csv += `P90,${RP90.toFixed(2)}\nP50,${RP50.toFixed(2)}\nP10,${RP10.toFixed(2)}\n`;
-  csv += `Deterministic Mid Case,${detRecMidCase.toFixed(2)}${pValRec ? ` (P${pValRec})` : ''}\n`;
 
-  // Multi-reservoir summary
+  const uType = csvUnitType(fluid, lastSimulationData.metric || null);
+  const { field: fUnit, si: sUnit, conv } = csvUnitMeta(uType);
+  const f90 = toFieldBase(P90, uType),  f50 = toFieldBase(P50, uType),  f10 = toFieldBase(P10, uType);
+  const fDet = toFieldBase(detMidCase, uType);
+  const rf90 = toFieldBase(RP90, uType), rf50 = toFieldBase(RP50, uType), rf10 = toFieldBase(RP10, uType);
+  const rfDet = toFieldBase(detRecMidCase, uType);
+
+  const volHdr  = sUnit ? `Value (${fUnit}),Value (${sUnit})` : `Value (${fUnit})`;
+  const fmtBoth = (v) => sUnit ? `${v.toFixed(3)},${(v * conv).toFixed(3)}` : v.toFixed(3);
+
+  let csv = `RangeRover Summary Report\n`;
+  csv += `Metric,${labelSet.primary}\nField Unit,${fUnit}\n`;
+  if (sUnit) csv += `SI Unit,${sUnit}\n`;
+  csv += `\nIn-Place Volume\nStatistic,${volHdr}\n`;
+  csv += `P90,${fmtBoth(f90)}\nP50,${fmtBoth(f50)}\nP10,${fmtBoth(f10)}\n`;
+  csv += `Deterministic Mid Case,${fmtBoth(fDet)}${pValMain ? ` (P${pValMain})` : ''}\n`;
+  csv += `\nRecoverable Volume\nStatistic,${volHdr}\n`;
+  csv += `P90,${fmtBoth(rf90)}\nP50,${fmtBoth(rf50)}\nP10,${fmtBoth(rf10)}\n`;
+  csv += `Deterministic Mid Case,${fmtBoth(rfDet)}${pValRec ? ` (P${pValRec})` : ''}\n`;
+
   if (advancedMode && lastMultiResults) {
     csv += `\nPer-Reservoir Summary\n`;
-    csv += `Reservoir,Fluid,Unit,In-Place P90,In-Place P50,In-Place P10,In-Place Det Mid Case,Recoverable P90,Recoverable P50,Recoverable P10,Recoverable Det Mid Case\n`;
+    csv += `Reservoir,Fluid,Field Unit,SI Unit,`;
+    csv += `In-Place P90 (field),In-Place P90 (SI),In-Place P50 (field),In-Place P50 (SI),In-Place P10 (field),In-Place P10 (SI),In-Place Det Mid (field),In-Place Det Mid (SI),`;
+    csv += `Recoverable P90 (field),Recoverable P90 (SI),Recoverable P50 (field),Recoverable P50 (SI),Recoverable P10 (field),Recoverable P10 (SI),Recoverable Det Mid (field),Recoverable Det Mid (SI)\n`;
+
     for (const r of lastMultiResults.perReservoir) {
       const [rP90, rP50, rP10] = computeQuantiles(r.primary);
       const [rrP90, rrP50, rrP10] = computeQuantiles(r.rec);
       const fname = fluidDisplayName[r.fluid] || r.fluid;
-      csv += `${r.name},${fname},${r.labelSet.unit},${rP90.toFixed(2)},${rP50.toFixed(2)},${rP10.toFixed(2)},${r.detMidCase.toFixed(2)},${rrP90.toFixed(2)},${rrP50.toFixed(2)},${rrP10.toFixed(2)},${r.detRecMidCase.toFixed(2)}\n`;
-      // Sub-component breakdown for dual-phase fluids
+      const rUType = csvUnitType(r.fluid, r.metric);
+      const { field: rF, si: rS, conv: rC } = csvUnitMeta(rUType);
+      const toF  = v => toFieldBase(v, rUType);
+      const both = v => { const fv = toF(v); return rS ? `${fv.toFixed(3)},${(fv * rC).toFixed(3)}` : `${fv.toFixed(3)},`; };
+      csv += `${r.name},${fname},${rF},${rS || ''},`;
+      csv += `${both(rP90)},${both(rP50)},${both(rP10)},${both(r.detMidCase)},`;
+      csv += `${both(rrP90)},${both(rrP50)},${both(rrP10)},${both(r.detRecMidCase)}\n`;
+
       if (r.subComponents && r.subComponents.length > 0) {
         for (const sc of r.subComponents) {
-          const [scP90, scP50, scP10] = computeQuantiles(sc.inPlace);
-          const [scrP90, scrP50, scrP10] = computeQuantiles(sc.recoverable);
-          csv += `  ${sc.label} (${r.name}),${fname},${sc.unit},${scP90.toFixed(2)},${scP50.toFixed(2)},${scP10.toFixed(2)},,${scrP90.toFixed(2)},${scrP50.toFixed(2)},${scrP10.toFixed(2)},\n`;
+          const [scP90, scP50, scP10]   = computeQuantiles(sc.data);
+          const [scrP90, scrP50, scrP10] = computeQuantiles(sc.recData);
+          const scUType = csvUnitType(r.fluid, sc.metric);
+          const { field: scF, si: scS, conv: scC } = csvUnitMeta(scUType);
+          const scToF  = v => toFieldBase(v, scUType);
+          const scBoth = v => { const fv = scToF(v); return scS ? `${fv.toFixed(3)},${(fv * scC).toFixed(3)}` : `${fv.toFixed(3)},`; };
+          csv += `  ${sc.label} (${r.name}),${fname},${scF},${scS || ''},`;
+          csv += `${scBoth(scP90)},${scBoth(scP50)},${scBoth(scP10)},,`;
+          csv += `${scBoth(scrP90)},${scBoth(scrP50)},${scBoth(scrP10)},\n`;
         }
       }
     }
@@ -1037,54 +1101,138 @@ function generateSummaryCSV() {
 function generateSamplesCSV() {
   if (!lastSimulationData) return;
   try {
-    const { samplesData, labelSet, fluid } = lastSimulationData;
+    const { samplesData, fluid } = lastSimulationData;
     if (!samplesData || samplesData.length === 0) { alert('No simulation data. Run a simulation first.'); return; }
+
+    // Conversion constants (always compute from raw acre-ft base)
+    const ACFT_TO_M3     = 1233.48;
+    const ACRES_TO_KM2   = 0.00404686;
+    const FT_TO_M        = 0.3048;
+
     const geomMode = geometryMode();
     let headers = [];
-    if (geomMode === 'grv') { headers.push('GRV (acre-ft)'); }
-    else { headers.push('Area (acres)', 'Thickness (ft)'); }
-    if (fluid === 'csg') { headers.push('Coal Density (g/cm³)', 'Gas Content (m³/ton)'); }
-    else { headers.push('Net to Gross (frac)', 'Porosity (frac)', 'Water Saturation (frac)'); }
+
+    // ---- Inputs ----
+    if (geomMode === 'grv') {
+      headers.push('GRV (acre-ft)', 'GRV (m³)');
+    } else {
+      headers.push('Area (acres)', 'Area (km²)', 'Thickness (ft)', 'Thickness (m)');
+    }
+    if (fluid === 'csg') {
+      headers.push('Coal Density (g/cm³)', 'Gas Content (m³/ton)');
+    } else {
+      headers.push('Net to Gross (frac)', 'Porosity (frac)', 'Water Saturation (frac)');
+    }
     if (fluid === 'oil' || fluid === 'oilgas') { headers.push('Bo (RB/STB)'); if (fluid === 'oilgas') headers.push('Rs (scf/STB)'); }
     else if (fluid === 'gas' || fluid === 'gasvo') { headers.push('Bg (scf/SCF)'); if (fluid === 'gasvo') headers.push('Rv (STB/MMscf)'); }
     headers.push('Recovery Factor (frac)');
-    if (fluid === 'csg') { if (geomMode !== 'grv') headers.push('GRV (acre-ft)'); headers.push('Coal Mass (tons)'); }
-    else { if (geomMode !== 'grv') headers.push('GRV (acre-ft)'); headers.push('NRV (acre-ft)', 'PV (acre-ft)', 'HCPV (acre-ft)'); }
-    if (fluid === 'oilgas') { headers.push('STOIIP (oil) (MMBO)', 'GIIP (solution gas) (Bscf)', 'Total In-Place (MMBOE)'); }
-    else if (fluid === 'gasvo') { headers.push('GIIP (gas) (Bscf)', 'STOIIP (vaporized oil) (MMBO)', 'Total In-Place (MMBOE)'); }
-    else { headers.push(`In-Place (${labelSet.unit})`); }
-    headers.push(`Recoverable (${labelSet.unit})`);
+
+    // ---- Geometric intermediates ----
+    if (fluid === 'csg') {
+      if (geomMode !== 'grv') headers.push('GRV (acre-ft)', 'GRV (m³)');
+      headers.push('Coal Mass (tons)');
+    } else {
+      if (geomMode !== 'grv') headers.push('GRV (acre-ft)', 'GRV (m³)');
+      headers.push('NRV (acre-ft)', 'NRV (m³)', 'PV (acre-ft)', 'PV (m³)', 'HCPV (acre-ft)', 'HCPV (m³)');
+    }
+
+    // ---- Volume outputs: always field + SI ----
+    if (fluid === 'oil') {
+      headers.push('STOIIP (MMBO)', 'STOIIP (MMSm³)', 'Recoverable (MMBO)', 'Recoverable (MMSm³)');
+    } else if (fluid === 'gas' || fluid === 'csg') {
+      headers.push('GIIP (BCF)', 'GIIP (GSm³)', 'Recoverable (BCF)', 'Recoverable (GSm³)');
+    } else if (fluid === 'oilgas') {
+      headers.push(
+        'STOIIP (MMBO)', 'STOIIP (MMSm³)',
+        'GIIP solution gas (BCF)', 'GIIP solution gas (GSm³)',
+        'Total In-Place (MMBOE)',
+        'Recoverable Oil (MMBO)', 'Recoverable Oil (MMSm³)',
+        'Recoverable Gas (BCF)', 'Recoverable Gas (GSm³)'
+      );
+    } else if (fluid === 'gasvo') {
+      headers.push(
+        'GIIP (BCF)', 'GIIP (GSm³)',
+        'Vaporized Oil In-Place (MMBO)', 'Vaporized Oil In-Place (MMSm³)',
+        'Total In-Place (MMBOE)',
+        'Recoverable Gas (BCF)', 'Recoverable Gas (GSm³)',
+        'Recoverable Vaporized Oil (MMBO)', 'Recoverable Vaporized Oil (MMSm³)'
+      );
+    }
 
     const rows = [];
     for (let i = 0; i < samplesData.length; i++) {
       const row = samplesData[i];
-      let values = [];
-      if (geomMode === 'grv') { values.push(row.GRV.toFixed(2)); }
-      else { values.push(row.Area.toFixed(2), row.Thickness.toFixed(2)); }
-      if (fluid === 'csg') { values.push(row.CoalDensity.toFixed(2), row.GasContent.toFixed(2)); }
-      else { values.push(row.NTG.toFixed(4), row.PHI.toFixed(4), row.SW.toFixed(4)); }
-      if (fluid === 'oil' || fluid === 'oilgas') { values.push(row.FVF.toFixed(4)); if (fluid === 'oilgas') values.push(row.Rs.toFixed(2)); }
-      else if (fluid === 'gas' || fluid === 'gasvo') { values.push(row.FVF.toFixed(4)); if (fluid === 'gasvo') values.push(row.Rv.toFixed(4)); }
-      values.push(row.RF.toFixed(4));
+      const values = [];
       const grv = row.GRV;
+
+      // ---- Inputs ----
+      if (geomMode === 'grv') {
+        values.push(grv.toFixed(2), (grv * ACFT_TO_M3).toFixed(0));
+      } else {
+        values.push(row.Area.toFixed(3), (row.Area * ACRES_TO_KM2).toFixed(6),
+                    row.Thickness.toFixed(3), (row.Thickness * FT_TO_M).toFixed(4));
+      }
       if (fluid === 'csg') {
-        if (geomMode !== 'grv') values.push(grv.toFixed(2));
-        values.push(row.CoalMass.toFixed(2));
+        values.push(row.CoalDensity.toFixed(3), row.GasContent.toFixed(3));
+      } else {
+        values.push(row.NTG.toFixed(4), row.PHI.toFixed(4), row.SW.toFixed(4));
+      }
+      if (fluid === 'oil' || fluid === 'oilgas') { values.push(row.FVF.toFixed(4)); if (fluid === 'oilgas') values.push(row.Rs.toFixed(2)); }
+      else if (fluid === 'gas' || fluid === 'gasvo') { values.push(row.FVF.toFixed(6)); if (fluid === 'gasvo') values.push(row.Rv.toFixed(6)); }
+      values.push(row.RF.toFixed(4));
+
+      // ---- Geometric intermediates ----
+      if (fluid === 'csg') {
+        if (geomMode !== 'grv') values.push(grv.toFixed(2), (grv * ACFT_TO_M3).toFixed(0));
+        values.push(row.CoalMass.toFixed(0));
       } else {
         const nrv = grv * row.NTG, pv = nrv * row.PHI, hcpv = pv * (1 - row.SW);
-        if (geomMode !== 'grv') values.push(grv.toFixed(2));
-        values.push(nrv.toFixed(2), pv.toFixed(2), hcpv.toFixed(2));
+        if (geomMode !== 'grv') values.push(grv.toFixed(2), (grv * ACFT_TO_M3).toFixed(0));
+        values.push(nrv.toFixed(2), (nrv * ACFT_TO_M3).toFixed(0),
+                    pv.toFixed(2),  (pv  * ACFT_TO_M3).toFixed(0),
+                    hcpv.toFixed(2),(hcpv * ACFT_TO_M3).toFixed(0));
       }
-      if (fluid === 'oilgas') {
-        const stoiip = (7758 * grv * row.NTG * row.PHI * (1 - row.SW) / row.FVF) / 1e6;
-        const giip = (7758 * grv * row.NTG * row.PHI * (1 - row.SW) * row.Rs / row.FVF) / 1e9;
-        values.push(stoiip.toFixed(2), giip.toFixed(2), (stoiip + giip / 5.8).toFixed(2));
+
+      // ---- Volumes: always recompute in base field units from raw acre-ft GRV ----
+      const hc = row.NTG * row.PHI * (1 - row.SW);
+      if (fluid === 'oil') {
+        const ip   = (7758 * grv * hc / row.FVF) / 1e6;
+        const rec  = ip * row.RF;
+        values.push(ip.toFixed(3), (ip * CSV_OIL_TO_SI).toFixed(4), rec.toFixed(3), (rec * CSV_OIL_TO_SI).toFixed(4));
+      } else if (fluid === 'gas') {
+        const ip   = (43560 * grv * hc / row.FVF) / 1e9;
+        const rec  = ip * row.RF;
+        values.push(ip.toFixed(3), (ip * CSV_GAS_TO_SI).toFixed(4), rec.toFixed(3), (rec * CSV_GAS_TO_SI).toFixed(4));
+      } else if (fluid === 'csg') {
+        const ip   = (48013 * grv * row.CoalDensity * row.GasContent) / 1e9;
+        const rec  = ip * row.RF;
+        values.push(ip.toFixed(3), (ip * CSV_GAS_TO_SI).toFixed(4), rec.toFixed(3), (rec * CSV_GAS_TO_SI).toFixed(4));
+      } else if (fluid === 'oilgas') {
+        const stoiip = (7758  * grv * hc / row.FVF) / 1e6;
+        const giip   = (7758  * grv * hc * row.Rs / row.FVF) / 1e9;
+        const total  = stoiip + giip / 5.8;
+        const recOil = stoiip * row.RF, recGas = giip * row.RF;
+        values.push(
+          stoiip.toFixed(3), (stoiip * CSV_OIL_TO_SI).toFixed(4),
+          giip.toFixed(3),   (giip   * CSV_GAS_TO_SI).toFixed(4),
+          total.toFixed(3),
+          recOil.toFixed(3), (recOil * CSV_OIL_TO_SI).toFixed(4),
+          recGas.toFixed(3), (recGas * CSV_GAS_TO_SI).toFixed(4)
+        );
       } else if (fluid === 'gasvo') {
-        const giip = (43560 * grv * row.NTG * row.PHI * (1 - row.SW) / row.FVF) / 1e9;
-        const stoiip = (43560 * grv * row.NTG * row.PHI * (1 - row.SW) * row.Rv / row.FVF) / 1e6;
-        values.push(giip.toFixed(2), stoiip.toFixed(2), (giip / 5.8 + stoiip).toFixed(2));
-      } else { values.push(row.primary.toFixed(2)); }
-      values.push(row.recoverable.toFixed(2));
+        const giip = (43560 * grv * hc / row.FVF) / 1e9;
+        const vo   = (43560 * grv * hc * row.Rv / row.FVF) / 1e6;
+        const total = giip / 5.8 + vo;
+        const recGas = giip * row.RF, recVo = vo * row.RF;
+        values.push(
+          giip.toFixed(3),  (giip  * CSV_GAS_TO_SI).toFixed(4),
+          vo.toFixed(3),    (vo    * CSV_OIL_TO_SI).toFixed(4),
+          total.toFixed(3),
+          recGas.toFixed(3),(recGas * CSV_GAS_TO_SI).toFixed(4),
+          recVo.toFixed(3), (recVo  * CSV_OIL_TO_SI).toFixed(4)
+        );
+      }
+
       rows.push(values.join(','));
     }
     downloadCSV('rangerover_samples.csv', headers.join(',') + '\n' + rows.join('\n'));
