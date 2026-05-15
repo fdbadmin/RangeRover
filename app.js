@@ -25,6 +25,27 @@ const GRV_FACTORS = {
   'm^3': (1e6 / 1233.48184)
 };
 
+/* Output unit conversion factors (relative to base units: STB for oil, SCF for gas) */
+const OIL_OUTPUT_FACTORS = {
+  'MMBO': 1e6,      // Million barrels (default)
+  'MBO': 1e3,       // Thousand barrels
+  'STB': 1,         // Stock tank barrels
+  'MMSTB': 1e6      // Million stock tank barrels (same as MMBO)
+};
+
+const GAS_OUTPUT_FACTORS = {
+  'BCF': 1e9,       // Billion cubic feet (default)
+  'TCF': 1e12,      // Trillion cubic feet
+  'MCF': 1e3,       // Thousand cubic feet
+  'SCF': 1,         // Standard cubic feet
+  'MMCF': 1e6,      // Million cubic feet
+  'BCM': 3.531e10,  // Billion cubic meters (1 BCM ≈ 35.31 BCF)
+  'MCM': 3.531e4    // Million cubic meters
+};
+
+/* Gas-to-oil equivalence factor (1 BOE = 5,800 SCF) */
+const BOE_CONVERSION = 5800;
+
 /* ===== 3. FLUID CONFIGS ===== */
 function geometryMode() {
   const sel = document.getElementById('geometryMode');
@@ -46,40 +67,56 @@ function paramsFor(fluid) {
 }
 
 function labelsFor(fluid) {
+  const gasUnit = getGasOutputUnitText();
+  const oilUnit = getOilOutputUnitText();
+  
   if (fluid === 'gas') {
-    return { primary: "GIIP", unit: "BCF", xMain: "GIIP (BCF)", xRec: "Recoverable (BCF)",
+    return { 
+      primary: "GIIP", unit: gasUnit, 
+      xMain: `GIIP (${gasUnit})`, xRec: `Recoverable (${gasUnit})`,
       cdfTitle: "GIIP CDF", histTitle: "GIIP Histogram", metricRec: "Recoverable GIIP",
-      formula: 'Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF).'
+      formula: `Formula (Gas): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in ${gasUnit}).`
     };
   }
   if (fluid === 'csg') {
-    return { primary: "GIIP", unit: "BCF", xMain: "GIIP (BCF)", xRec: "Recoverable (BCF)",
+    return { 
+      primary: "GIIP", unit: gasUnit, 
+      xMain: `GIIP (${gasUnit})`, xRec: `Recoverable (${gasUnit})`,
       cdfTitle: "GIIP CDF", histTitle: "GIIP Histogram", metricRec: "Recoverable GIIP",
-      formula: 'Formula (Coal Seam Gas): <code>GIIP = 48,013 × A × h × ρ<sub>coal</sub> × G<sub>c</sub></code> where ρ<sub>coal</sub> = coal density (g/cm³), G<sub>c</sub> = gas content (m³/ton). Result in SCF; plots in BCF.'
+      formula: `Formula (Coal Seam Gas): <code>GIIP = 48,013 × A × h × ρ<sub>coal</sub> × G<sub>c</sub></code> where ρ<sub>coal</sub> = coal density (g/cm³), G<sub>c</sub> = gas content (m³/ton). Result in SCF; plots in ${gasUnit}.`
     };
   }
   if (fluid === 'gasvo') {
-    return { primary: "GIIP", unit: "BCF", xMain: "GIIP (BCF)", xRec: "Recoverable (BCF)",
+    return { 
+      primary: "GIIP", unit: gasUnit, 
+      xMain: `GIIP (${gasUnit})`, xRec: `Recoverable (${gasUnit})`,
       cdfTitle: "GIIP CDF", histTitle: "GIIP Histogram", metricRec: "Recoverable GIIP",
-      formula: 'Formula (Gas + Vaporized Oil): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in BCF). Vaporized oil from gas cap: <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB). Total MMBOE = GIIP(MMBOE) + VO(MMBO).'
+      formula: `Formula (Gas + Vaporized Oil): <code>GIIP = 43,560 × A × h × NTG × φ × (1 − Sw) / Bg</code> (SCF; plots in ${gasUnit}). Vaporized oil from gas cap: <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in ${oilUnit}). Total MMBOE = GIIP(MMBOE) + VO(MMBO).`
     };
   }
-  return { primary: "STOIIP", unit: "MMBO", xMain: "STOIIP (MMBO)", xRec: "Recoverable (MMBO)",
+  return { 
+    primary: "STOIIP", unit: oilUnit, 
+    xMain: `STOIIP (${oilUnit})`, xRec: `Recoverable (${oilUnit})`,
     cdfTitle: "STOIIP CDF", histTitle: "STOIIP Histogram", metricRec: "Recoverable STOIIP",
-    formula: 'Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in MMBO).'
+    formula: `Formula (Oil): <code>STOIIP = 7758 × A × h × NTG × φ × (1 − Sw) / Bo</code> (STB; plots in ${oilUnit}).`
   };
 }
 
 function labelsForFluidMetric(fluid, metric) {
+  const gasUnit = getGasOutputUnitText();
+  const oilUnit = getOilOutputUnitText();
+  
   if (fluid === 'oilgas') {
     if (metric === 'stoiip') return labelsFor('oil');
     if (metric === 'giip') return {
-      primary: 'GIIP', unit: 'BCF', xMain: 'GIIP (BCF)', xRec: 'Recoverable (BCF)',
+      primary: 'GIIP', unit: gasUnit, 
+      xMain: `GIIP (${gasUnit})`, xRec: `Recoverable (${gasUnit})`,
       cdfTitle: 'GIIP CDF', histTitle: 'GIIP Histogram', metricRec: 'Recoverable GIIP',
-      formula: 'Formula (Solution Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF; plots in BCF).'
+      formula: `Formula (Solution Gas): <code>GIIP = 7758 × A × h × NTG × φ × (1 − Sw) × Rs / Bo</code> (SCF; plots in ${gasUnit}).`
     };
     return {
-      primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
+      primary: 'Total MMBOE', unit: 'MMBOE', 
+      xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
       cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
       formula: 'Formula (Total): <code>Total MMBOE = STOIIP + GIIP</code> (plots in MMBOE).'
     };
@@ -87,12 +124,14 @@ function labelsForFluidMetric(fluid, metric) {
   if (fluid === 'gasvo') {
     if (metric === 'giip') return labelsFor('gas');
     if (metric === 'vo') return {
-      primary: 'Vaporized Oil', unit: 'MMBO', xMain: 'Vaporized Oil (MMBO)', xRec: 'Recoverable (MMBO)',
+      primary: 'Vaporized Oil', unit: oilUnit, 
+      xMain: `Vaporized Oil (${oilUnit})`, xRec: `Recoverable (${oilUnit})`,
       cdfTitle: 'Vaporized Oil CDF', histTitle: 'Vaporized Oil Histogram', metricRec: 'Recoverable Vaporized Oil',
-      formula: 'Formula (Vaporized Oil): <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in MMBO).'
+      formula: `Formula (Vaporized Oil): <code>VO = 43,560 × A × h × NTG × φ × (1 − Sw) × Rv / Bg</code> (STB; plots in ${oilUnit}).`
     };
     return {
-      primary: 'Total MMBOE', unit: 'MMBOE', xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
+      primary: 'Total MMBOE', unit: 'MMBOE', 
+      xMain: 'Total (MMBOE)', xRec: 'Recoverable (MMBOE)',
       cdfTitle: 'Total MMBOE CDF', histTitle: 'Total MMBOE Histogram', metricRec: 'Recoverable MMBOE',
       formula: 'Formula (Total): <code>Total MMBOE = GIIP(MMBOE) + Vaporized Oil (MMBO)</code>.'
     };
@@ -162,6 +201,27 @@ const THICK = document.getElementById('thicknessUnit');
 let GRV_UNIT = null;
 let PARAMS = paramsFor('oil');
 
+/* Get selected output units */
+function getOilOutputUnit() {
+  const sel = document.getElementById('oilOutputUnit');
+  return sel ? sel.value : 'MMBO';
+}
+
+function getGasOutputUnit() {
+  const sel = document.getElementById('gasOutputUnit');
+  return sel ? sel.value : 'BCF';
+}
+
+function getOilOutputUnitText() {
+  const sel = document.getElementById('oilOutputUnit');
+  return sel ? sel.options[sel.selectedIndex].text : 'MMBO';
+}
+
+function getGasOutputUnitText() {
+  const sel = document.getElementById('gasOutputUnit');
+  return sel ? sel.options[sel.selectedIndex].text : 'BCF';
+}
+
 const DIST_LABELS = {
   "Discrete": ["Value 1", "Value 2", "Value 3"],
   "Triangular": ["Min", "Mode", "Max"],
@@ -219,25 +279,30 @@ function computeVolumeSingle(fluid, metric, AH, params) {
   const NTG = params['Net to Gross'];
   const PHI = params['Porosity'];
   const SW = params['Water Saturation'];
+  
+  // Get output unit factors
+  const oilFactor = OIL_OUTPUT_FACTORS[getOilOutputUnit()] || OIL_OUTPUT_FACTORS['MMBO'];
+  const gasFactor = GAS_OUTPUT_FACTORS[getGasOutputUnit()] || GAS_OUTPUT_FACTORS['BCF'];
+  
   switch (fluid) {
     case 'oil':
-      return (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / 1e6;
+      return (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / oilFactor;
     case 'gas':
-      return (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / 1e9;
+      return (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / gasFactor;
     case 'csg':
-      return (48013 * AH * params['Coal Density'] * params['Gas Content']) / 1e9;
+      return (48013 * AH * params['Coal Density'] * params['Gas Content']) / gasFactor;
     case 'oilgas': {
-      const stoiip = (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / 1e6;
-      const giipBCF = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / 1e9;
-      const giipBOE = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / 5.8e9;
+      const stoiip = (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / oilFactor;
+      const giipBCF = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / gasFactor;
+      const giipBOE = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / (BOE_CONVERSION * oilFactor);
       if (metric === 'stoiip') return stoiip;
       if (metric === 'giip') return giipBCF;
       return stoiip + giipBOE;
     }
     case 'gasvo': {
-      const giip = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / 1e9;
-      const giipBOE = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / 5.8e9;
-      const vo = (43560 * AH * NTG * PHI * (1 - SW) * params['Rv'] / params['Bg']) / 1e6;
+      const giip = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / gasFactor;
+      const giipBOE = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / (BOE_CONVERSION * oilFactor);
+      const vo = (43560 * AH * NTG * PHI * (1 - SW) * params['Rv'] / params['Bg']) / oilFactor;
       if (metric === 'giip') return giip;
       if (metric === 'vo') return vo;
       return giipBOE + vo;
@@ -247,17 +312,34 @@ function computeVolumeSingle(fluid, metric, AH, params) {
 }
 
 function volumeToMBOE(value, fluid, metric) {
-  if (fluid === 'oil') return value;
-  if (fluid === 'gas' || fluid === 'csg') return value / 5.8;
+  // Convert from current output units to MMBOE
+  const oilFactor = OIL_OUTPUT_FACTORS[getOilOutputUnit()] || OIL_OUTPUT_FACTORS['MMBO'];
+  const gasFactor = GAS_OUTPUT_FACTORS[getGasOutputUnit()] || GAS_OUTPUT_FACTORS['BCF'];
+  
+  if (fluid === 'oil') {
+    // Convert oil from selected unit to MMBO (which equals MMBOE for oil)
+    return value * oilFactor / OIL_OUTPUT_FACTORS['MMBO'];
+  }
+  if (fluid === 'gas' || fluid === 'csg') {
+    // Convert gas from selected unit to SCF, then to MMBOE
+    const scf = value * gasFactor;
+    return scf / (BOE_CONVERSION * OIL_OUTPUT_FACTORS['MMBO']);
+  }
   if (fluid === 'oilgas') {
-    if (metric === 'stoiip') return value;
-    if (metric === 'giip') return value / 5.8;
-    return value;
+    if (metric === 'stoiip') return value * oilFactor / OIL_OUTPUT_FACTORS['MMBO'];
+    if (metric === 'giip') {
+      const scf = value * gasFactor;
+      return scf / (BOE_CONVERSION * OIL_OUTPUT_FACTORS['MMBO']);
+    }
+    return value; // total already in BOE
   }
   if (fluid === 'gasvo') {
-    if (metric === 'giip') return value / 5.8;
-    if (metric === 'vo') return value;
-    return value;
+    if (metric === 'giip') {
+      const scf = value * gasFactor;
+      return scf / (BOE_CONVERSION * OIL_OUTPUT_FACTORS['MMBO']);
+    }
+    if (metric === 'vo') return value * oilFactor / OIL_OUTPUT_FACTORS['MMBO'];
+    return value; // total already in BOE
   }
   return value;
 }
@@ -1231,6 +1313,15 @@ function renderDistPreviewsDebounced() { clearTimeout(previewTimer); previewTime
 AREA.addEventListener('change', renderDistPreviewsDebounced);
 THICK.addEventListener('change', renderDistPreviewsDebounced);
 document.addEventListener('change', (e) => { if (e.target && e.target.id === 'grvUnit') renderDistPreviewsDebounced(); });
+
+/* Output unit change listeners - rerun simulation if results exist */
+document.addEventListener('change', (e) => {
+  if (e.target && (e.target.id === 'oilOutputUnit' || e.target.id === 'gasOutputUnit')) {
+    if (lastSim || lastMultiResults) {
+      runSimulation();
+    }
+  }
+});
 
 function renderDistPreviews() {
   const grid = document.getElementById('previewGrid'); grid.innerHTML = '';
