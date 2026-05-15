@@ -5,7 +5,6 @@
 
 /* ===== 1. GLOBALS & STATE ===== */
 let previewTimer = null;
-let lastSim = null;
 let syncing = false;
 let lastSimulationData = null;
 
