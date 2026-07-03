@@ -1654,7 +1654,7 @@ function plotTornado(bars, unit) {
   const layout = {
     title: { text: 'Tornado Sensitivity', font: { size: 19, color: '#111827' }, x: 0.02, xanchor: 'left' },
     barmode: 'relative',
-    margin: { t: 60, l: 120, r: 40, b: 70 },
+    margin: { t: 86, l: 120, r: 40, b: 70 },
     xaxis: {
       title: { text: `Change from Base (${unit || ''})`, standoff: 10 },
       zeroline: true, zerolinewidth: 2, zerolinecolor: '#374151', gridcolor: '#EFEFEF',
@@ -1668,7 +1668,7 @@ function plotTornado(bars, unit) {
     paper_bgcolor: '#fff', plot_bgcolor: '#fff', showlegend: false,
     shapes: [{ type: 'line', x0: 0, x1: 0, y0: -0.5, y1: names.length - 0.5, yref: 'y', line: { color: '#374151', width: 2 } }]
   };
-  Plotly.newPlot('tornado', [traceLow, traceHigh], layout, { displayModeBar: false, responsive: true });
+  Plotly.newPlot('tornado', [traceLow, traceHigh], layout, { displayModeBar: true, responsive: true, toImageButtonOptions: { format: 'png', filename: 'rangerover-tornado', width: 1600, height: 1000, scale: 3 } });
 }
 
 /* ===== 15. SYNCED ZOOM ===== */
