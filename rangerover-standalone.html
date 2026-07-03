@@ -1542,7 +1542,7 @@ function tornadoBarsMulti(reservoirResults) {
   return bars;
 }
 
-function plotTornado(bars, unit) {
+function plotTornado(bars, unit, fullWidth) {
   const names = bars.map(b => b.name);
   const lowDeltas = bars.map(b => b.lowDelta);
   const highDeltas = bars.map(b => b.highDelta);
@@ -1586,6 +1586,8 @@ function plotTornado(bars, unit) {
     const h = Math.max(420, needed);
     gd.style.aspectRatio = 'auto';
     gd.style.height = h + 'px';
+    // 3+ reservoirs: expand to the full panel width (align with the plots above)
+    gd.style.maxWidth = fullWidth ? '100%' : '';
     layout.height = h - 40;                              // inside container padding
   }
   Plotly.newPlot('tornado', [traceLow, traceHigh], layout, { displayModeBar: true, responsive: true, toImageButtonOptions: { format: 'png', filename: 'rangerover-tornado', width: 1600, height: 1000, scale: 3 } });
@@ -2925,7 +2927,7 @@ function runMultiReservoirSimulation() {
   // Tornado
   if (perReservoir.length > 1) {
     const bars = tornadoBarsMulti(perReservoir);
-    plotTornado(bars, totalUnit);
+    plotTornado(bars, totalUnit, perReservoir.length >= 3);
   } else {
     const r = perReservoir[0];
     const bars = tornadoBars(r.dists, r.rfType, r.rfRaw, r.rfPerc, r.fluid, r.metric);
