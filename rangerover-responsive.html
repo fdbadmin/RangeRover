@@ -16,7 +16,8 @@
   html,body{margin:0; padding:0; background:#fff; color:var(--text);
     font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
   /* Center content and add side whitespace */
-  .wrap{margin:0; padding:0 4cm; box-sizing:border-box; width:100%;}
+  /* Phase A: fluid outer padding — scales from 12px on phones to 60px on wide monitors */
+  .wrap{margin:0; padding:0 clamp(12px, 4vw, 60px); box-sizing:border-box; width:100%;}
 
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;
     margin:12px 0 14px; padding:14px 18px; background:#fff; border:1px solid var(--border);
@@ -42,19 +43,45 @@
   }
   @media (max-width: 640px){
     .creator,.logo{display:none}
+    h1{font-size:20px}
   }
 
-  /* Left fixed; right flexible */
-  .grid{display:grid; grid-template-columns:820px calc(100% - 820px - 28px); gap:28px;}
-  @media (max-width:1280px){ .grid{grid-template-columns:1fr} }
+  /* Left fixed; right flexible.
+     520px left panel gives charts ~780px at 1440px (vs 477px before).
+     Container queries handle dist-row reflow based on actual panel width,
+     independent of viewport — no need for viewport breakpoints inside the panel.
+     clamp(400px, 30vw, 800px): scales proportionally so a 28" monitor gets a
+     proportionally wider input panel (576px@1920, 768px@2560) rather than a fixed 520px. */
+  .grid{display:grid; grid-template-columns:clamp(400px, 30vw, 800px) 1fr; gap:24px;}
+  @media (max-width:1100px){
+    .grid{grid-template-columns:1fr; gap:16px;}
+  }
 
-  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; box-sizing:border-box;}
+  /* Collapse toggle: hides the left panel for a chart-only view */
+  .grid.inputs-collapsed > .left-panel{ display:none; }
+  .grid.inputs-collapsed{ grid-template-columns:1fr; }
+  #toggleInputsBtn{ min-width:90px; font-size:13px; padding:7px 12px; }
+
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:clamp(12px,2vw,20px); box-sizing:border-box;}
   .section-title{display:flex;align-items:center;gap:8px;margin:0 0 12px 0}
   .chip{background:#fff;border:1px solid var(--border);padding:2px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
   hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 
+  /* Container queries for the input panel — reflow based on actual card width,
+     not viewport width. Dist-rows reflow correctly whether the panel is narrow
+     because of viewport OR because the left panel is 520px on a wide screen. */
+  .card{ container-type: inline-size; }
+
   .form-grid{display:grid;grid-template-columns:200px 1fr;gap:10px 16px;align-items:center}
   .form-grid .note{grid-column:2/3;color:var(--muted);font-size:12px;margin-top:-6px}
+  @container (max-width: 600px){
+    .form-grid{grid-template-columns:130px 1fr;gap:8px 10px;}
+    .form-grid .note{grid-column:1/-1;margin-top:0}
+  }
+  @container (max-width: 420px){
+    .form-grid{grid-template-columns:1fr;gap:6px;}
+    .form-grid .note{grid-column:1;}
+  }
   label{font-weight:600}
   select,input[type="number"],input[type="text"]{
     width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
@@ -77,6 +104,33 @@
   }
   .weights-row.hidden{display:none}
   .weights-row label{font-weight:500; color:var(--muted)}
+  /* Container: two-row layout when panel <= 660px (5-col needs ~640px minimum to be readable) */
+  @container (max-width: 660px){
+    .dist-row{
+      grid-template-columns:1fr 1fr;
+      grid-template-rows:auto auto auto;
+    }
+    .dist-row > :nth-child(1){ grid-column:1; grid-row:1; }
+    .dist-row > :nth-child(2){ grid-column:2; grid-row:1; }
+    .dist-row > :nth-child(3){ grid-column:1; grid-row:2; }
+    .dist-row > :nth-child(4){ grid-column:2; grid-row:2; }
+    .dist-row > :nth-child(5){ grid-column:1/-1; grid-row:3; }
+    .weights-row{
+      grid-template-columns:1fr 1fr;
+      grid-template-rows:auto auto;
+    }
+    .weights-row > :nth-child(1){ grid-column:1/-1; }
+    .weights-row > :nth-child(2){ grid-column:1; }
+    .weights-row > :nth-child(3){ grid-column:2; }
+    .weights-row > :nth-child(4){ grid-column:1; }
+    .weights-row > :nth-child(5){ grid-column:2; }
+  }
+  @container (max-width: 380px){
+    .dist-row{ grid-template-columns:1fr; }
+    .dist-row > *{ grid-column:1; grid-row:auto; }
+    .weights-row{ grid-template-columns:1fr 1fr; }
+    .weights-row > :nth-child(1){ grid-column:1/-1; }
+  }
 
   .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
   button{appearance:none;border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:#fff;color:#111;cursor:pointer;font-size:14px}
@@ -87,14 +141,18 @@
   .previews{margin-top:14px}
   .previews h4{margin:10px 0 8px 0}
   .preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:640px){ .preview-grid{grid-template-columns:1fr} }
   .mini{
     width:100%; min-height:240px; border:1px solid var(--border); border-radius:12px;
     padding:18px 18px 42px 18px; box-sizing:border-box; background:#fff; overflow:hidden;
   }
 
-  .summary-wrap table{width:100%}
+  /* Scrollable table wrapper so summary never overflows at small widths */
+  .summary-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .summary-wrap table{width:100%;min-width:360px}
   table{border-collapse:collapse}
   th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
+  @media (max-width:640px){ th,td{padding:7px 6px;font-size:13px} }
   th{font-weight:700}
   .muted{color:var(--muted)}
 
@@ -102,12 +160,26 @@
   .plot{
     width:100%; aspect-ratio: 16 / 10; min-height:440px;
     border:1px solid var(--border); border-radius:12px;
-    padding:20px; box-sizing:border-box; background:#fff; overflow:hidden;
+    padding:clamp(10px,2vw,20px); box-sizing:border-box; background:#fff; overflow:hidden;
   }
   .plot-full{grid-column:1 / -1}
   .plot-tornado{
     min-height: 420px; aspect-ratio: 16 / 7;
-    max-width:65%; margin-left:0; margin-right:auto; /* narrower & left-aligned */
+    max-width:65%; margin-left:0; margin-right:auto;
+  }
+  /* Small laptop: plots grid tighter */
+  @media (max-width:1100px){
+    .plot-tornado{ max-width:100%; }
+  }
+  /* Tablet: single-column plots, relax min-heights */
+  @media (max-width:900px){
+    .plots-grid{grid-template-columns:1fr;}
+    .plot{ min-height:320px; aspect-ratio:16/9; }
+    .plot-tornado{ min-height:280px; aspect-ratio:16/6; max-width:100%; }
+  }
+  @media (max-width:640px){
+    .plot{ min-height:240px; aspect-ratio:4/3; }
+    .plot-tornado{ min-height:200px; aspect-ratio:16/7; }
   }
   .chart-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin:6px 0 0}
 
@@ -116,12 +188,17 @@
   .modal.open{display:flex}
   .modal-content{
     background:#fff;border-radius:14px;border:1px solid var(--border);max-width:1100px;width:100%;
-    max-height:85vh; overflow:auto; box-shadow:var(--shadow); padding:24px 28px 30px;
+    max-height:88vh; overflow:auto; box-shadow:var(--shadow); padding:24px 28px 30px;
+  }
+  @media (max-width:640px){
+    .modal{ padding:8px; }
+    .modal-content{ padding:14px 12px 16px; border-radius:10px; max-height:92vh; }
   }
   .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
   .modal h2{margin:0 0 4px 0}
   .modal .close{appearance:none;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 10px;cursor:pointer}
   .toc{display:grid;grid-template-columns:1fr 1fr; gap:8px; margin:12px 0 16px}
+  @media (max-width:640px){ .toc{grid-template-columns:1fr} }
   .toc a{color:var(--shell-red);text-decoration:none;font-weight:600}
   .toc a:hover{text-decoration:underline}
   .manual h3{margin-top:18px}
@@ -208,10 +285,22 @@
   .field.hidden-field{ display:none; }
 
   
-  /* Make CDF and Histograms 5% taller */
+  /* Make CDF and Histograms 5% taller on large screens */
   #cdf-main, #hist-main, #cdf-rec, #hist-rec{
-    aspect-ratio: 16 / 10.5; /* 5% taller than 16/10 */
-    min-height: 462px;       /* 5% taller than 440px */
+    aspect-ratio: 16 / 10.5;
+    min-height: 462px;
+  }
+  @media (max-width:900px){
+    #cdf-main, #hist-main, #cdf-rec, #hist-rec{
+      aspect-ratio: 16 / 9;
+      min-height: 300px;
+    }
+  }
+  @media (max-width:640px){
+    #cdf-main, #hist-main, #cdf-rec, #hist-rec{
+      aspect-ratio: 4 / 3;
+      min-height: 220px;
+    }
   }
 
   /* ===== Advanced Mode ===== */
@@ -225,8 +314,9 @@
   .tab-bar .tab.active{background:#fff;border-bottom:2px solid #fff;margin-bottom:-1px;z-index:1;color:var(--shell-red)}
   .tab-bar .tab-add{padding:6px 12px;border-radius:8px;font-size:12px;color:var(--muted)}
   .tab-bar .tab-remove{padding:4px 8px;border-radius:8px;font-size:11px;color:#B91C1C;border-color:#FCA5A5}
-  .corr-matrix{display:grid;gap:2px;font-size:12px;margin:8px 0;overflow-x:auto}
+  .corr-matrix{display:grid;gap:2px;font-size:12px;margin:8px 0;overflow-x:auto; -webkit-overflow-scrolling:touch;}
   .corr-matrix input{width:52px;padding:4px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:12px}
+  @media (max-width:900px){ .corr-matrix input{width:44px;font-size:11px;padding:3px} }
   .corr-matrix .diag{background:#f3f4f6;text-align:center;font-weight:600;padding:4px}
   .corr-matrix .hdr{font-weight:600;text-align:center;padding:4px;font-size:11px;color:var(--muted)}
   .corr-warn{color:#B91C1C;font-size:12px;font-weight:600;margin:4px 0}
@@ -243,9 +333,9 @@
   .results-view-bar select{padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px}
   .preset-btns{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap}
   .preset-btns button{padding:4px 10px;font-size:11px;border-radius:6px}
-  .reservoir-name-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;width:140px}
+  .reservoir-name-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;width:clamp(100px,30vw,140px)}
   .inter-res-hint{font-size:12px;color:var(--muted);margin:4px 0}
-  .cross-res-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+  .cross-res-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px;display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .cross-res-table th,.cross-res-table td{padding:6px 4px;border-bottom:1px solid var(--border);text-align:center}
   .cross-res-table th{font-weight:600;color:var(--muted);font-size:11px;white-space:nowrap}
   .cross-res-table td:first-child,.cross-res-table th:first-child{text-align:left;font-weight:600;min-width:100px}
@@ -268,6 +358,7 @@
       <button id="saveProject" class="help-btn" title="Save project to file">💾 Save</button>
       <button id="openProject" class="help-btn" title="Open project from file">📂 Open</button>
       <input type="file" id="projectFileInput" accept=".rrp,.json" style="display:none">
+      <button id="toggleInputsBtn" class="help-btn" title="Show or hide the inputs panel">&#x27E8; Inputs</button>
       <button id="helpBtn" class="help-btn" title="User manual">Help</button>
       <img class="logo" alt="Shell" src="https://1000logos.net/wp-content/uploads/2017/06/Shell-Logo.png" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
     </div>
@@ -281,8 +372,8 @@
   </div>
 
   <div class="grid">
-    <!-- Inputs -->
-    <div class="card">
+    <!-- Inputs (left panel) -->
+    <div class="card left-panel">
       <h3 class="section-title">Inputs <span class="chip">Units + distributions</span></h3>
 
       <!-- Advanced: Reservoir Tabs -->
@@ -3138,6 +3229,23 @@ helpBtn.addEventListener('click', () => { helpModal.classList.add('open'); helpM
 helpClose.addEventListener('click', () => { helpModal.classList.remove('open'); helpModal.setAttribute('aria-hidden', 'true'); });
 helpModal.addEventListener('click', (e) => { if (e.target === helpModal) helpClose.click(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && helpModal.classList.contains('open')) helpClose.click(); });
+
+// Inputs panel collapse toggle
+const toggleInputsBtn = document.getElementById('toggleInputsBtn');
+const mainGrid = document.querySelector('.grid');
+(function(){
+  const stored = localStorage.getItem('rr-inputs-collapsed');
+  if (stored === '1') { mainGrid.classList.add('inputs-collapsed'); toggleInputsBtn.textContent = '\u27E9 Inputs'; }
+})();
+if (toggleInputsBtn && mainGrid) {
+  toggleInputsBtn.addEventListener('click', () => {
+    const collapsed = mainGrid.classList.toggle('inputs-collapsed');
+    toggleInputsBtn.textContent = collapsed ? '\u27E9 Inputs' : '\u27E8 Inputs';
+    localStorage.setItem('rr-inputs-collapsed', collapsed ? '1' : '0');
+    // Give Plotly charts a chance to resize into the new layout
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+  });
+}
 
 // CSV buttons
 document.getElementById('downloadCsv').addEventListener('click', generateSummaryCSV);

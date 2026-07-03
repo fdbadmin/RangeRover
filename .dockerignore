@@ -1,0 +1,7 @@
+node_modules/
+package.json
+qc-harness.test.js
+test-saveload.js
+QC_Report.md
+QC_TestPlan.html
+*.md

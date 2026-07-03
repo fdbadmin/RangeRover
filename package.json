@@ -1,0 +1,15 @@
+{
+  "name": "rangerover-volumetrics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RangeRover web-based volumetric screening tool for oil & gas — QC test wiring",
+  "scripts": {
+    "test": "node qc-harness.test.js && node test-saveload.js",
+    "test:harness": "node qc-harness.test.js",
+    "test:saveload": "node test-saveload.js",
+    "build": "node qc-harness.test.js && node test-saveload.js && node build-shareable.js"
+  },
+  "devDependencies": {
+    "jsdom": ">=22"
+  }
+}

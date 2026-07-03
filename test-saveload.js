@@ -7,13 +7,16 @@ const { JSDOM } = require('jsdom');
 const html = fs.readFileSync('index.html', 'utf8');
 const appJs = fs.readFileSync('app.js', 'utf8');
 
-// Build a standalone HTML for JSDOM
-const standaloneSrc = html.replace(
-  '<script src="app.js"></script>',
-  `<script>window.Plotly = { newPlot(){}, relayout(){}, purge(){} };\n${appJs}\n</script>`
-);
+// Build a standalone HTML for JSDOM (strip the Plotly CDN tag — real Plotly
+// cannot run under jsdom and would overwrite the stub / crash on canvas APIs)
+const standaloneSrc = html
+  .replace('<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>', '')
+  .replace(
+    '<script src="app.js"></script>',
+    `<script>window.Plotly = { newPlot(){ return Promise.resolve(); }, relayout(){ return Promise.resolve(); }, purge(){} };\n${appJs}\n</script>`
+  );
 
-const dom = new JSDOM(standaloneSrc, { runScripts: 'dangerously', resources: 'usable' });
+const dom = new JSDOM(standaloneSrc, { runScripts: 'dangerously' });
 const win = dom.window;
 const doc = win.document;
 
@@ -101,12 +104,12 @@ setTimeout(() => {
     advToggle.checked = true;
     advToggle.dispatchEvent(new win.Event('change'));
 
-    // Add a second reservoir
-    const addBtn = doc.getElementById('addReservoir');
+    // Add a second reservoir (the add button is .tab-add inside #reservoirTabs)
+    const addBtn = doc.querySelector('#reservoirTabs .tab-add');
     if (addBtn) addBtn.click();
 
     // Switch to reservoir 2 and change its fluid
-    const tabs = doc.querySelectorAll('.reservoir-tabs .tab-btn');
+    const tabs = doc.querySelectorAll('#reservoirTabs .tab');
     if (tabs.length >= 2) {
       tabs[1].click();
       doc.getElementById('fluid').value = 'oil';
@@ -128,15 +131,21 @@ setTimeout(() => {
 
     // Restore advanced project
     win.deserializeProject(advProject);
-    const advModeAfter = win.advancedMode;
-    const resCountAfter = win.reservoirs.length;
+    // top-level let/const are not exposed on window under jsdom — read via eval
+    const advModeAfter = win.eval('advancedMode');
+    const resCountAfter = win.eval('reservoirs').length;
     console.log('\nAfter advanced restore:');
     console.log('advancedMode:', advModeAfter, advModeAfter ? '✓' : '✗');
     console.log('reservoirs:', resCountAfter, resCountAfter >= 2 ? '✓' : '✗');
 
+    if (!allOk || !advModeAfter || resCountAfter < 2) {
+      console.error('\n=== TEST FAILED: one or more checks did not pass ===');
+      process.exit(1);
+    }
     console.log('\n=== ALL TESTS PASSED ===');
   } catch (err) {
     console.error('TEST FAILED:', err.message);
     console.error(err.stack);
+    process.exit(1);
   }
 }, 200);

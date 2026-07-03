@@ -49,6 +49,7 @@
 
 <div class="toc">
   <strong>Contents</strong>
+  <a href="#sA">A. Automated QC Harness (run first)</a>
   <a href="#s0">0. Pre-flight</a>
   <a href="#s1">1. Formula Accuracy — Deterministic Mid-Case (Field Units)</a>
   <a href="#s2">2. Formula Accuracy — Deterministic Mid-Case (SI Units)</a>
@@ -66,11 +67,48 @@
   <a href="#s14">14. UI Consistency &amp; Labels</a>
   <a href="#s15">15. Input Validation &amp; Error Handling</a>
   <a href="#s16">16. Edge Cases</a>
+  <a href="#sFindings">Appendix A. Known Findings Register (from automated QC)</a>
 </div>
 
 <p class="section-note">
   <strong>How to use this plan:</strong> Work through each section sequentially. Use the default values loaded by the app (click Reset between tests unless noted). The <span class="expected">expected</span> values are derived from the source code and hand-calculated — discrepancies indicate a bug. Tolerance for deterministic values is ±0.001 in displayed units. Tick the <span class="pass-box"></span> box for Pass, write ✗ + notes for any failure.
 </p>
+
+<!-- ===== SECTION A — AUTOMATED HARNESS ===== -->
+<h2 id="sA">A. Automated QC Harness (run before any manual testing)</h2>
+
+<p class="section-note">
+  The automated harness covers all computational paths in <code>rangerover-standalone.html</code> (the canonical build) with 78 checks. It must pass before any manual session is started.<br><br>
+  <strong>Canonical file under test:</strong> <code>rangerover-standalone.html</code> (single-file build — all engine code inline).<br>
+  <strong>Note:</strong> <code>index.html</code> + <code>app.js</code> is a separate multi-file variant. It has drifted from the standalone build (SI units mode, Rs bounds). Until builds are reconciled, treat the standalone as the authoritative QC target.
+</p>
+
+<table>
+  <tr><th class="id">ID</th><th>Check</th><th>Expected</th><th class="check">P/F</th></tr>
+  <tr><td class="id">A.1</td><td>Prerequisites: <code>node -v</code> ≥ 18; <code>jsdom</code> available globally or via npm install.</td><td><code>v18+</code> and jsdom resolves</td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">A.2</td><td>Run <code>npm test</code> (or <code>node qc-harness.test.js && node test-saveload.js</code>) from the workspace root. Both commands exit 0.</td><td><code>RESULT: 78 passed, 0 failed</code> and <code>=== ALL TESTS PASSED ===</code></td><td class="check"><span class="pass-box"></span></td></tr>
+  <tr><td class="id">A.3</td><td>No harness section fails. All 13 sections (A–M in the harness) reported as passing.</td><td>Zero failures listed</td><td class="check"><span class="pass-box"></span></td></tr>
+</table>
+
+<p class="section-note">
+  <strong>Harness section mapping to this manual plan:</strong>
+</p>
+<table style="font-size:12px">
+  <tr><th>Harness section</th><th>What it covers</th><th>Corresponding manual section</th></tr>
+  <tr><td>A — Formulas</td><td>Oil, gas, CSG, dual-phase volumetric formulas; tol 1×10⁻⁹</td><td>§1, §3, §7</td></tr>
+  <tr><td>B — Samplers</td><td>Sampler moments n=200,000 seeded; Known-dist implied Normal</td><td>§4, §6</td></tr>
+  <tr><td>C — Percentiles</td><td>SPE-PRMS exceedance convention; small-N bias (RR-04)</td><td>§6</td></tr>
+  <tr><td>D — Known dist</td><td>P90/P50/P10 round-trip through the sampler</td><td>§4</td></tr>
+  <tr><td>E — Iman–Conover</td><td>Correlation, PD check, marginal preservation, non-PD fallback (RR-07)</td><td>§11</td></tr>
+  <tr><td>F — Truncation</td><td>sampleNormalTrunc mean-clamping defect (RR-01 quantified at 77.7%)</td><td>§4, §15, §16</td></tr>
+  <tr><td>G — RF per-iteration</td><td>rec[i] = primary[i] × RF[i] exactness</td><td>§5</td></tr>
+  <tr><td>H — Unit factors</td><td>Area, thickness, GRV conversion constants; 6-sig-fig rounding (RR-11)</td><td>§3, §14</td></tr>
+  <tr><td>I — MBOE basis</td><td>5.8 Mscf/bbl BOE factor (RR-10)</td><td>§7, §14</td></tr>
+  <tr><td>J — Edge cases</td><td>Sw=1, Bo=0 (RR-02), Rs unbounded (RR-03), Tri negative porosity (RR-05), NaN filter (RR-08)</td><td>§15, §16</td></tr>
+  <tr><td>K — Reproducibility</td><td>Seeded RNG bit-identical; blank-seed non-reproducible</td><td>§6</td></tr>
+  <tr><td>L — End-to-end DOM</td><td>Full DOM simulation, 45.2550 MMBO benchmark, serialize/deserialize (RR-06)</td><td>§1, §13</td></tr>
+  <tr><td>M — CSG derivation</td><td>48,013 constant short-ton basis confirmed</td><td>§1C</td></tr>
+</table>
 
 <!-- ===== SECTION 0 ===== -->
 <h2 id="s0">0. Pre-flight</h2>
@@ -196,6 +234,14 @@
 
 <!-- ===== SECTION 2 ===== -->
 <h2 id="s2">2. Formula Accuracy — Deterministic Mid-Case (SI Units)</h2>
+
+<p class="section-note" style="background:#fff3cd; border:1px solid #ffc107; color:#664d03">
+  ⚠️ <strong>Build applicability:</strong> The SI unit system (MMSm³, GSm³) is present in <code>index.html</code> + <code>app.js</code> ONLY.
+  <code>rangerover-standalone.html</code> (the canonical single-file build and primary QC target) has <strong>no SI mode</strong>.
+  This section applies only when testing the multi-file build.
+  Mark as <strong>N/A</strong> if testing the standalone file.<br>
+  <strong>Ref: Finding RR-12 (build drift).</strong>
+</p>
 
 <p class="section-note">
   Switch <strong>Output unit system → SI</strong>. Area auto-switches to km², thickness to m. Re-enter input values in the new units (or keep field-unit values but note the different axis scale). The simplest approach: keep the same test as Section 1 but switch unit system, re-enter values in acres/ft (the area/thickness unit dropdowns can be switched manually back to acres/ft independently), and verify the results change consistently.<br><br>
@@ -470,6 +516,134 @@
   Reviewer signature: _________________________ &nbsp; Date: _____________<br><br>
   <strong>Result: </strong> <span style="font-size:14px">□ PASS &nbsp;&nbsp; □ PASS WITH MINOR DEVIATIONS (document) &nbsp;&nbsp; □ FAIL</span>
 </div>
+
+<!-- ===== APPENDIX A — FINDINGS REGISTER ===== -->
+<h2 id="sFindings">Appendix A. Known Findings Register (from automated QC)</h2>
+
+<p class="section-note">
+  These findings were identified during automated QC of <code>rangerover-standalone.html</code>. Status column should be updated as findings are resolved.
+  All HIGH findings must be resolved before the tool is used for unattended reserves bookings.
+</p>
+
+<table>
+  <tr>
+    <th class="id">ID</th>
+    <th>Sev.</th>
+    <th>Finding summary</th>
+    <th>Source location</th>
+    <th>Harness check</th>
+    <th>Status</th>
+    <th class="check">Resolved</th>
+  </tr>
+  <tr>
+    <td class="id">RR-01</td>
+    <td style="color:#b91c1c; font-weight:bold">HIGH</td>
+    <td><code>sampleNormalTrunc</code> clamps to the mean after 32 rejection attempts. A wide Normal on tight physical bounds silently produces a point-mass at the mean (77.7% of draws in the F2 stress test). P90–P10 range collapses without warning.</td>
+    <td><code>rangerover-standalone.html</code> ~L858–860</td>
+    <td>F1, F2</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-02</td>
+    <td style="color:#b91c1c; font-weight:bold">HIGH</td>
+    <td>No guard against Bo = 0 or Bg = 0 in <code>computeVolumeSingle</code>. Produces <code>Infinity</code> which propagates into quantiles.</td>
+    <td><code>computeVolumeSingle</code> oil/gas formula</td>
+    <td>J2</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-03</td>
+    <td style="color:#b91c1c; font-weight:bold">HIGH</td>
+    <td><code>Rs</code> (solution GOR) is missing from <code>boundsFor</code> → bounds (−∞, +∞). A Normal distribution can sample negative Rs, producing negative GIIP in oil-with-gas-cap mode. The <code>app.js</code> variant correctly bounds Rs ≥ 0 — standalone has drifted.</td>
+    <td><code>boundsFor</code> ~L849</td>
+    <td>J3a, J3b</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-04</td>
+    <td style="color:#b45309; font-weight:bold">MEDIUM</td>
+    <td>Nearest-rank (floor) percentile selection is biased at small N. n=10 gives P50=6 rather than interpolated 5.5. Insignificant at ≥1,000 iterations.</td>
+    <td><code>computeQuantiles</code> ~L1199</td>
+    <td>C6</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-05</td>
+    <td style="color:#b45309; font-weight:bold">MEDIUM</td>
+    <td>Triangular and Uniform draws are not clamped to physical bounds in <code>drawOne</code>. A Triangular porosity with negative min can return negative porosity. Normal/Known/PERT are bounded; Triangular/Uniform rely entirely on user input.</td>
+    <td><code>drawOne</code> ~L1058</td>
+    <td>J6</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-06</td>
+    <td style="color:#b45309; font-weight:bold">MEDIUM</td>
+    <td><code>deserializeProject</code> only checks <code>version != null</code>. No schema validation — malformed .rrp files can partially apply and leave the UI in a mixed state.</td>
+    <td><code>deserializeProject</code> ~L1474–1560</td>
+    <td>L7</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-07</td>
+    <td>LOW</td>
+    <td>Non-positive-definite correlation matrix in basic mode silently falls back to independent sampling inside <code>imanConover</code>. Multi-reservoir mode does show a UI warning; basic mode is silent.</td>
+    <td><code>imanConover</code> ~L968</td>
+    <td>E5</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-08</td>
+    <td>LOW</td>
+    <td>NaN samples are silently dropped from quantile computation — n shrinks without notice. Combined with RR-02/RR-03 this can mask upstream problems.</td>
+    <td><code>computeQuantiles</code> ~L1199</td>
+    <td>J7</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-09</td>
+    <td>LOW</td>
+    <td>Rv label inconsistency: CSV header "Rv (STB/MMscf)" vs UI label "bbl/scf". Factor-of-10⁶ ambiguity for readers, though math is consistent.</td>
+    <td><code>generateSamplesCSV</code> ~L1692</td>
+    <td>—</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-10</td>
+    <td>DISCLOSE</td>
+    <td>BOE basis is <strong>5.8 Mscf/bbl</strong> (not 6.0). Should be stated clearly in UI and exports. Verified correct internally; just needs disclosure.</td>
+    <td><code>volumeToMBOE</code></td>
+    <td>I6</td>
+    <td>Disclose</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-11</td>
+    <td>LOW</td>
+    <td>Area unit conversion constants rounded to 6 significant figures (max error ≈ 7 ppm). Immaterial for screening purposes; documented.</td>
+    <td><code>AREA_FACTORS</code> ~L725</td>
+    <td>H1–H3</td>
+    <td>Accepted</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+  <tr>
+    <td class="id">RR-12</td>
+    <td>DISCLOSE</td>
+    <td><strong>Build drift:</strong> standalone and app.js have diverged (SI units, Rs bounds, formula copies in CSV export). Maintain a single engine source; generate standalone from it.</td>
+    <td>Both builds</td>
+    <td>—</td>
+    <td>Open</td>
+    <td class="check"><span class="pass-box"></span></td>
+  </tr>
+</table>
 
 </body>
 </html>

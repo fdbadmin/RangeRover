@@ -1,0 +1,7 @@
+services:
+  rangerover:
+    build: .
+    container_name: rangerover
+    ports:
+      - "8080:80"      # Change 8080 to any free port on your NAS
+    restart: unless-stopped

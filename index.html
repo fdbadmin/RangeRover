@@ -532,7 +532,7 @@
         <li><b>Rs</b> (scf/bbl): Solution gas&#8211;oil ratio (Oil + Solution Gas fluid only).</li>
         <li><b>Rv</b> (bbl/scf): Vaporized oil&#8211;gas ratio (Gas + Vaporized Oil fluid only).</li>
         <li><b>Coal Density</b> (g/cm&#179;): Typically 1.3&#8211;1.5 (Coal Seam Gas only).</li>
-        <li><b>Gas Content</b> (m&#179;/tonne): Gas adsorbed per metric tonne (1,000&nbsp;kg) of coal (Coal Seam Gas only).</li>
+        <li><b>Gas Content</b> (m&#179;/ton): Gas adsorbed per <b>short ton</b> (2,000&nbsp;lb &#8776; 907&nbsp;kg) of coal (Coal Seam Gas only). The CSG constant (48,013) is derived on this short&#8209;ton basis.</li>
         <li><b>Recovery Factor</b>: fraction (0&#8211;1). Multiplies in&#8209;place volumes to give recoverable volumes.</li>
         <li><b>Output Unit System:</b> selectable in Simulation Settings.<ul>
           <li><b>Field</b> (default): oil in MMBO, gas in BCF, total in MMBOE.</li>
@@ -550,7 +550,7 @@
       <h3 id="dists">5) Distributions</h3>
       <p>Six distribution types are available for each parameter:</p>
       <ul>
-        <li><b>Normal</b> (default): Enter <i>Mean</i> and <i>Std Dev</i>. The third field is ignored. Draws are <b>truncated</b> to physical bounds (accept&#8211;reject sampling).</li>
+        <li><b>Normal</b> (default): Enter <i>Mean</i> and <i>Std Dev</i>. The third field is ignored. Draws are <b>truncated</b> to physical bounds using <b>inverse&#8209;CDF</b> sampling (exact draws from the truncated normal distribution &#8212; no rejection loops or mean&#8209;clamping).</li>
         <li><b>Triangular</b>: Enter <i>Min</i>, <i>Mode</i>, <i>Max</i>. Requires Min &#8804; Mode &#8804; Max.</li>
         <li><b>PERT</b> (Beta&#8209;PERT, &#955; = 4): Enter <i>Min</i>, <i>Mode</i>, <i>Max</i>. Smoother alternative to Triangular. Implied mean = (Min + 4&#215;Mode + Max) / 6. Truncated to physical bounds.</li>
         <li><b>Uniform</b>: Enter <i>Min</i> and <i>Max</i>. The middle field is ignored. All values in [Min, Max] are equally likely.</li>
@@ -559,7 +559,7 @@
       </ul>
 
       <h3 id="trunc">6) Physical Truncation</h3>
-      <p>All random draws are constrained to physically sensible ranges via accept&#8211;reject sampling:</p>
+      <p>All random draws are constrained to physically sensible ranges. <b>Normal</b> and <b>Known Distribution</b> types use <b>inverse&#8209;CDF truncation</b> (exact draws, no rejection or mean&#8209;clamping). <b>Triangular</b>, <b>Uniform</b>, and <b>PERT</b> draws are <b>clamped</b> to the bounds below. <b>Discrete</b> values are clamped at draw time.</p>
       <ul>
         <li><b>NTG, Porosity, Sw, RF</b>: 0 to 1</li>
         <li><b>Bo</b>: &#8805; 1.0</li>
@@ -574,7 +574,7 @@
       <ul>
         <li><b>Oil (STOIIP):</b> <code>7,758 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bo</code> &#8594; MMBO</li>
         <li><b>Gas (GIIP):</b> <code>43,560 &#215; A &#215; h &#215; NTG &#215; &#966; &#215; (1 &#8722; Sw) / Bg</code> &#8594; BCF</li>
-        <li><b>Coal Seam Gas (GIIP):</b> <code>43,560 &#215; A &#215; h &#215; &#961;<sub>coal</sub> &#215; G<sub>c</sub></code> &#8594; BCF &nbsp;(&#961;<sub>coal</sub> in t/m&#179;, G<sub>c</sub> in m&#179;/t)</li>
+        <li><b>Coal Seam Gas (GIIP):</b> <code>48,013 &#215; A &#215; h &#215; &#961;<sub>coal</sub> &#215; G<sub>c</sub></code> &#8594; BCF &nbsp;(&#961;<sub>coal</sub> in g/cm&#179;, G<sub>c</sub> in m&#179;/short&nbsp;ton)</li>
         <li><b>Oil + Solution Gas:</b> STOIIP and Solution Gas GIIP computed simultaneously (see Dual&#8209;Phase section).</li>
         <li><b>Gas + Vaporized Oil:</b> GIIP and Vaporized Oil computed simultaneously (see Dual&#8209;Phase section).</li>
       </ul>
@@ -635,7 +635,7 @@
         <li>The <b>correlation matrix</b> (under &#8220;Parameter Correlations&#8221;) shows all parameter pairs. Enter values from <b>&#8722;1</b> (perfect inverse) to <b>+1</b> (perfect positive). <b>0</b> = independent.</li>
         <li><b>Presets:</b> &#8220;None (Independent)&#8221; sets all to 0. &#8220;Typical Clastic&#8221; applies geologically common correlations (e.g., positive porosity&#8211;NTG, negative porosity&#8211;Sw).</li>
         <li><b>Positive definite check:</b> The matrix must be positive semi&#8209;definite &#8212; a warning appears if it is not. Adjust values until the warning clears.</li>
-        <li><b>Engine:</b> Correlations are enforced using the <b>Iman&#8209;Conover</b> method with Cholesky decomposition, which rearranges the rank structure of independently drawn samples to match the target correlation matrix while preserving each parameter&#8217;s marginal distribution.</li>
+        <li><b>Engine:</b> Correlations are enforced using the <b>Iman&#8209;Conover</b> method with Cholesky decomposition, which rearranges the rank structure of independently drawn samples to match the target correlation matrix while preserving each parameter&#8217;s marginal distribution. Targets are Spearman rank correlations; the engine converts them to the Gaussian&#8209;score scale (2&#8239;sin(&#960;&#961;/6)) and applies an exact score&#8209;matrix correction, so induced rank correlations are accurate to within &#177;0.005 (verified by the automated QC harness).</li>
       </ul>
 
       <h3 id="shared">13) Shared Parameters</h3>
@@ -644,7 +644,7 @@
         <li>Under &#8220;Shared Parameters&#8221;, each parameter shows a dropdown: <b>Independent</b> (default) or <b>Same as [Reservoir Name]</b>.</li>
         <li>When shared, the downstream reservoir uses the <i>same sample array</i> drawn for that parameter in the source reservoir. This models situations where two reservoirs share the same geological property (e.g., same porosity across a shared formation).</li>
         <li>The first reservoir cannot have shared links (it has no upstream source).</li>
-        <li>Shared parameters are applied <i>before</i> correlations, so shared samples still participate in the Iman&#8209;Conover rank adjustment.</li>
+        <li>A shared parameter is an <b>identity constraint</b>: the linked parameter is excluded from the Iman&#8209;Conover rank adjustment and copied directly from the source reservoir <i>after</i> correlations are applied. The two reservoirs therefore use <b>identical samples in every iteration</b>, and the shared parameter automatically inherits any correlations defined on its source. A shared link overrides any inter&#8209;reservoir correlation entered for the same parameter.</li>
       </ul>
 
       <h3 id="interres">14) Inter&#8209;Reservoir Correlations</h3>

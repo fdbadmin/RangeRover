@@ -184,9 +184,47 @@ function boundsFor(name, fluid) {
   return { min: -Infinity, max: Infinity };
 }
 
+// RR-01: Inverse-CDF truncated normal — replaces rejection-sampling with mean-clamp fallback.
+// Uses normCDF (Abramowitz & Stegun 26.2.17) and normQuantile (Acklam algorithm) so every
+// draw is exact — no loops, no point-mass at the mean for wide distributions on tight bounds.
+function normCDF(z) {
+  // A&S 26.2.17 rational approximation; max |error| < 7.5e-8
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const p = 1 - (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * z * z) * poly;
+  return z >= 0 ? p : 1 - p;
+}
+function normQuantile(p) {
+  // Peter Acklam's rational approximation; max |error| ≈ 1.15e-9
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+              1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+  const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+              6.680131188771972e+01, -1.328068155288572e+01];
+  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+              -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+  const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+  const plo = 0.02425, phi = 1 - plo;
+  let q;
+  if (p < plo) {
+    const r = Math.sqrt(-2 * Math.log(p));
+    q = (((((c[0]*r+c[1])*r+c[2])*r+c[3])*r+c[4])*r+c[5]) / ((((d[0]*r+d[1])*r+d[2])*r+d[3])*r+1);
+  } else if (p <= phi) {
+    const r = p - 0.5, s = r * r;
+    q = r * (((((a[0]*s+a[1])*s+a[2])*s+a[3])*s+a[4])*s+a[5]) / (((((b[0]*s+b[1])*s+b[2])*s+b[3])*s+b[4])*s+1);
+  } else {
+    const r = Math.sqrt(-2 * Math.log(1 - p));
+    q = -(((((c[0]*r+c[1])*r+c[2])*r+c[3])*r+c[4])*r+c[5]) / ((((d[0]*r+d[1])*r+d[2])*r+d[3])*r+1);
+  }
+  return q;
+}
 function sampleNormalTrunc(r, mean, std, min, max) {
-  for (let k = 0; k < 32; k++) { const x = sampleNormal(r, mean, std); if (x >= min && x <= max) return x; }
-  return Math.max(min, Math.min(max, mean));
+  if (!(std > 0)) return Math.max(min, Math.min(max, mean)); // degenerate: zero std
+  const lo = normCDF((min - mean) / std);
+  const hi = normCDF((max - mean) / std);
+  if (hi - lo < 1e-15) return Math.max(min, Math.min(max, mean)); // true degenerate: bounds exclude almost all mass
+  return mean + std * normQuantile(lo + r() * (hi - lo));
 }
 
 /* ===== 6. UNIT CONVERSION ===== */
@@ -269,12 +307,15 @@ function computeVolumeSingle(fluid, metric, AH, params) {
   
   switch (fluid) {
     case 'oil':
+      if (!(params['Bo'] > 0)) return NaN; // RR-02: guard against zero/negative FVF
       return (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / oilFactor;
     case 'gas':
+      if (!(params['Bg'] > 0)) return NaN; // RR-02
       return (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / gasFactor;
     case 'csg':
-      return (43560 * AH * params['Coal Density'] * params['Gas Content']) / gasFactor;
+      return (48013 * AH * params['Coal Density'] * params['Gas Content']) / gasFactor;
     case 'oilgas': {
+      if (!(params['Bo'] > 0)) return NaN; // RR-02
       const stoiip = (7758 * AH * NTG * PHI * (1 - SW) / params['Bo']) / oilFactor;
       const giipBCF = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / gasFactor;
       const giipBOE = (7758 * AH * NTG * PHI * (1 - SW) * params['Rs'] / params['Bo']) / (5800 * oilFactor);
@@ -283,6 +324,7 @@ function computeVolumeSingle(fluid, metric, AH, params) {
       return stoiip + giipBOE;
     }
     case 'gasvo': {
+      if (!(params['Bg'] > 0)) return NaN; // RR-02
       const giip = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / gasFactor;
       const giipBOE = (43560 * AH * NTG * PHI * (1 - SW) / params['Bg']) / (5800 * oilFactor);
       const vo = (43560 * AH * NTG * PHI * (1 - SW) * params['Rv'] / params['Bg']) / oilFactor;
@@ -363,7 +405,12 @@ function imanConover(sampleColumns, targetCorr) {
       if (i !== j && Math.abs(targetCorr[i][j]) > 1e-10) allZero = false;
   if (allZero) return sampleColumns.map(c => Float64Array.from(c));
 
-  const L = choleskyL(targetCorr);
+  // RR-15a: Spearman → Pearson adjustment (Iman & Conover, 1982). Inducing Pearson rho_p
+  // on Gaussian scores yields Spearman (6/π)·asin(rho_p/2); invert with rho_p = 2·sin(π·rho_s/6)
+  // so requested values are hit on the RANK scale. Falls back if the adjustment breaks PD.
+  const adjCorr = targetCorr.map((row, i) => row.map((v, j) => i === j ? 1 : 2 * Math.sin(Math.PI * v / 6)));
+  let L = choleskyL(adjCorr);
+  if (!L) L = choleskyL(targetCorr); // rare: adjusted matrix not PD — use unadjusted target
   if (!L) return sampleColumns.map(c => Float64Array.from(c)); // fallback if not PD
 
   // Step 1: Generate independent standard normal scores with deterministic RNG
@@ -378,6 +425,36 @@ function imanConover(sampleColumns, targetCorr) {
       col[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
     }
     normalScores.push(col);
+  }
+
+  // Step 1b (RR-15b): score-matrix correction — standardize the score columns and strip
+  // their O(1/√n) sampling correlation exactly (Y = Q⁻¹M with E = QQᵀ the sample
+  // correlation of the scores), so step 2 induces the requested correlation without
+  // Monte-Carlo error from the score matrix itself.
+  for (let j = 0; j < k; j++) {
+    const col = normalScores[j];
+    let mu = 0; for (let i = 0; i < n; i++) mu += col[i]; mu /= n;
+    let vv = 0; for (let i = 0; i < n; i++) { col[i] -= mu; vv += col[i] * col[i]; }
+    const sd = Math.sqrt(vv / n) || 1;
+    for (let i = 0; i < n; i++) col[i] /= sd;
+  }
+  const E = Array.from({ length: k }, () => new Array(k).fill(0));
+  for (let a = 0; a < k; a++) {
+    E[a][a] = 1;
+    for (let b = 0; b < a; b++) {
+      let s = 0; for (let i = 0; i < n; i++) s += normalScores[a][i] * normalScores[b][i];
+      E[a][b] = E[b][a] = s / n;
+    }
+  }
+  const Q = choleskyL(E);
+  if (Q) {
+    for (let i = 0; i < n; i++) {          // forward-substitution per iteration: y = Q⁻¹m
+      for (let a = 0; a < k; a++) {
+        let s = normalScores[a][i];
+        for (let b = 0; b < a; b++) s -= Q[a][b] * normalScores[b][i];
+        normalScores[a][i] = Q[a][a] > 1e-12 ? s / Q[a][a] : 0;
+      }
+    }
   }
 
   // Step 2: Apply Cholesky factor to normal scores → correlated normal scores
@@ -419,9 +496,11 @@ function drawOne(rng, type, vals, name, weightsPerc, fluid) {
     for (let i = 0; i < dVals.length; i++) { acc += weights[i]; if (u <= acc) return Math.max(min, Math.min(max, dVals[i])); }
     return Math.max(min, Math.min(max, dVals[dVals.length - 1]));
   } else if (type === 'Triangular') {
-    return sampleTriangular(rng, vals[0], vals[1], vals[2]);
+    // RR-05: clamp to physical bounds (consistent with PERT handling)
+    return Math.max(min, Math.min(max, sampleTriangular(rng, vals[0], vals[1], vals[2])));
   } else if (type === 'Uniform') {
-    return sampleUniform(rng, vals[0], vals[2]);
+    // RR-05: clamp to physical bounds
+    return Math.max(min, Math.min(max, sampleUniform(rng, vals[0], vals[2])));
   } else if (type === 'Normal') {
     return sampleNormalTrunc(rng, vals[0], vals[1], min, max);
   } else if (type === 'PERT') {
@@ -850,6 +929,7 @@ function serializeProject() {
       rfRaw: r.rfRaw,
       rfPerc: r.rfPerc,
       correlationMatrix: r.correlationMatrix,
+      corrParams: r.corrParams || null,
       sharedLinks: r.sharedLinks
     })),
     crossReservoirCorr
@@ -873,14 +953,36 @@ function serializeProject() {
     const rfRaw = [...document.querySelectorAll('.rf-v')].map(x => x.value === '' ? NaN : Number(x.value));
     let rfPerc = [NaN, NaN, NaN];
     if (rfType === 'Discrete') rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x => Number(x.value));
-    project.reservoirs = [{ id: 0, name: 'Reservoir 1', fluid, dists, rfType, rfRaw, rfPerc, correlationMatrix: readCorrelationMatrix(), sharedLinks: readSharedLinks() }];
+    project.reservoirs = [{ id: 0, name: 'Reservoir 1', fluid, dists, rfType, rfRaw, rfPerc, correlationMatrix: readCorrelationMatrix(), corrParams: PARAMS.map(p => p.name), sharedLinks: readSharedLinks() }];
   }
 
   return project;
 }
 
+// RR-06: schema validation helper — returns an error string or null on success
+function validateProjectSchema(project) {
+  if (!project || typeof project !== 'object') return 'Not an object.';
+  if (project.version !== 1) return `Unsupported version: ${project.version}. Expected 1.`;
+  if (!Array.isArray(project.reservoirs) || project.reservoirs.length === 0)
+    return 'Missing or empty reservoirs array.';
+  const validFluids = new Set(['oil', 'gas', 'csg', 'oilgas', 'gasvo']);
+  for (let i = 0; i < project.reservoirs.length; i++) {
+    const r = project.reservoirs[i];
+    if (!r || typeof r !== 'object') return `Reservoir ${i + 1}: not an object.`;
+    if (!validFluids.has(r.fluid)) return `Reservoir ${i + 1}: unrecognised fluid "${r.fluid}".`;
+    if (!Array.isArray(r.dists)) return `Reservoir ${i + 1}: dists is not an array.`;
+    for (let j = 0; j < r.dists.length; j++) {
+      const d = r.dists[j];
+      if (!d || !Array.isArray(d.raw) || d.raw.length < 3)
+        return `Reservoir ${i + 1}, dist ${j + 1}: raw must be an array of ≥3 values.`;
+    }
+  }
+  return null;
+}
+
 function deserializeProject(project) {
-  if (!project || project.version == null) { alert('Invalid project file.'); return; }
+  const schemaErr = validateProjectSchema(project);
+  if (schemaErr) { alert('Invalid project file: ' + schemaErr); return; }
 
   _loadingReservoir = true;
   try {
@@ -923,6 +1025,7 @@ function deserializeProject(project) {
       rfRaw: r.rfRaw || [NaN, NaN, NaN],
       rfPerc: r.rfPerc || [NaN, NaN, NaN],
       correlationMatrix: r.correlationMatrix || null,
+      corrParams: r.corrParams || null,
       sharedLinks: r.sharedLinks || {}
     }));
 
@@ -1563,6 +1666,7 @@ function createDefaultReservoirState(idx) {
     rfRaw: [0.5, 0.05, NaN],
     rfPerc: [NaN, NaN, NaN],
     correlationMatrix: null,
+    corrParams: null,
     sharedLinks: {}
   };
 }
@@ -1589,6 +1693,7 @@ function saveReservoirToState() {
   r.rfPerc = [NaN, NaN, NaN];
   if (r.rfType === 'Discrete') r.rfPerc = [...document.querySelectorAll('#rf-weights input')].map(x => Number(x.value));
   r.correlationMatrix = readCorrelationMatrix();
+  r.corrParams = PARAMS.map(p => p.name); // RR-16: record the param order the matrix was saved under
   r.sharedLinks = readSharedLinks();
   const nameInput = document.getElementById('reservoirName');
   if (nameInput) r.name = nameInput.value || r.name;
@@ -1758,6 +1863,8 @@ function buildCorrelationMatrix() {
 
   const r = reservoirs[activeReservoirIdx];
   const existingCorr = (r && r.correlationMatrix) ? r.correlationMatrix : null;
+  // RR-16: map saved values by parameter NAME (fluid/geometry may have changed since save)
+  const savedNames = (r && r.corrParams) ? r.corrParams : paramNames;
 
   // Grid: k+1 columns (header + k params)
   container.style.gridTemplateColumns = `80px repeat(${k}, 52px)`;
@@ -1783,7 +1890,9 @@ function buildCorrelationMatrix() {
       } else if (j < i) {
         const inp = document.createElement('input'); inp.type = 'number'; inp.step = '0.1'; inp.min = '-1'; inp.max = '1';
         inp.setAttribute('data-row', i); inp.setAttribute('data-col', j);
-        const val = existingCorr ? (existingCorr[i][j] || 0) : 0;
+        const si = savedNames.indexOf(paramNames[i]);
+        const sj = savedNames.indexOf(paramNames[j]);
+        const val = (existingCorr && si >= 0 && sj >= 0 && existingCorr[si] && typeof existingCorr[si][sj] === 'number') ? existingCorr[si][sj] : 0;
         inp.value = val;
         inp.addEventListener('input', validateCorrelationMatrixUI);
         container.appendChild(inp);
@@ -2041,10 +2150,12 @@ function buildFullCorrelationMatrix(configs, crossCorr) {
       const rIdx = allParams[i].rIdx;
       const corrMatrix = configs[rIdx].corrMatrix;
       if (!corrMatrix) continue;
-      const paramNames = configs[rIdx].dists.map(d => d.name);
+      // RR-16: index the saved matrix by the param names it was saved under, not by the
+      // current dists order (fluid/geometry changes would otherwise silently remap rows)
+      const paramNames = configs[rIdx].corrParams || configs[rIdx].dists.map(d => d.name);
       const iLocal = paramNames.indexOf(allParams[i].name);
       const jLocal = paramNames.indexOf(allParams[j].name);
-      if (iLocal >= 0 && jLocal >= 0) {
+      if (iLocal >= 0 && jLocal >= 0 && corrMatrix[iLocal] && typeof corrMatrix[iLocal][jLocal] === 'number') {
         matrix[i][j] = corrMatrix[iLocal][jLocal];
         matrix[j][i] = corrMatrix[iLocal][jLocal];
       }
@@ -2106,7 +2217,7 @@ function runMultiReservoirSimulation() {
       }
       dists.push({ ...d, v: conv });
     }
-    configs.push({ fluid, metric, dists, rfType: r.rfType, rfRaw: r.rfRaw, rfPerc: r.rfPerc, iterations: iters, useGRV, corrMatrix: r.correlationMatrix, sharedLinks: r.sharedLinks || {} });
+    configs.push({ fluid, metric, dists, rfType: r.rfType, rfRaw: r.rfRaw, rfPerc: r.rfPerc, iterations: iters, useGRV, corrMatrix: r.correlationMatrix, corrParams: r.corrParams || null, sharedLinks: r.sharedLinks || {} });
   }
 
   // Phase 1: Sample all reservoirs
@@ -2116,18 +2227,28 @@ function runMultiReservoirSimulation() {
   }
 
   // Phase 2: Apply shared parameter links
+  const sharedTargets = new Set(); // `${rIdx}|${paramName}` for every valid link target
   for (let rIdx = 0; rIdx < configs.length; rIdx++) {
     const links = configs[rIdx].sharedLinks;
     for (const [paramName, srcIdx] of Object.entries(links)) {
       if (Number.isFinite(srcIdx) && srcIdx < rIdx && allSamples[srcIdx][paramName]) {
         allSamples[rIdx][paramName] = Float64Array.from(allSamples[srcIdx][paramName]);
+        sharedTargets.add(rIdx + '|' + paramName);
       }
     }
   }
 
-  // Phase 3: Unified Iman-Conover (intra-reservoir + cross-reservoir correlations)
+  // Phase 3: Unified Iman-Conover (intra-reservoir + cross-reservoir correlations).
+  // Shared-link targets are EXCLUDED from reordering: a shared parameter is an identity
+  // constraint, so it must inherit the source column exactly (including any correlation
+  // the source picks up). Reordering it independently would silently break the link.
   const crossCorr = readCrossReservoirCorr();
-  const { allParams: icParams, matrix: fullCorrMatrix } = buildFullCorrelationMatrix(configs, crossCorr);
+  const { allParams, matrix } = buildFullCorrelationMatrix(configs, crossCorr);
+  const keepIdx = [];
+  for (let k = 0; k < allParams.length; k++)
+    if (!sharedTargets.has(allParams[k].rIdx + '|' + allParams[k].name)) keepIdx.push(k);
+  const icParams = keepIdx.map(k => allParams[k]);
+  const fullCorrMatrix = keepIdx.map(i => keepIdx.map(j => matrix[i][j]));
   const hasAnyCorrelation = fullCorrMatrix.some((row, i) => row.some((v, j) => i !== j && Math.abs(v) > 1e-10));
   if (hasAnyCorrelation) {
     if (isPositiveDefinite(fullCorrMatrix)) {
@@ -2135,6 +2256,15 @@ function runMultiReservoirSimulation() {
       const reordered = imanConover(columns, fullCorrMatrix);
       for (let k = 0; k < icParams.length; k++) {
         allSamples[icParams[k].rIdx][icParams[k].name] = reordered[k];
+      }
+      // Re-copy shared links (ascending rIdx) so identity survives reordering of sources
+      for (let rIdx = 0; rIdx < configs.length; rIdx++) {
+        const links = configs[rIdx].sharedLinks;
+        for (const [paramName, srcIdx] of Object.entries(links)) {
+          if (sharedTargets.has(rIdx + '|' + paramName)) {
+            allSamples[rIdx][paramName] = Float64Array.from(allSamples[srcIdx][paramName]);
+          }
+        }
       }
     } else {
       const warn = document.getElementById('interResCorrWarn');
