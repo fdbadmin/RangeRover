@@ -605,7 +605,9 @@
         <li><b>Low/High bounds</b> are derived from each distribution: Normal = mean &#177; 1.28&#963; (&#8776; P10/P90); Triangular / PERT / Uniform = Min / Max; Known = P90 / P10; Discrete = min / max of the entered values.</li>
         <li><span style="color:var(--up)">Green bars</span> = positive impact (upside); <span style="color:var(--down)">Red bars</span> = negative impact (downside).</li>
         <li>Parameters are sorted from largest impact (top) to smallest (bottom).</li>
-        <li>There is no limit to the number of variables shown.</li>
+        <li>There is no limit to the number of variables shown. The chart <b>grows in height</b> with the number of bars so every row stays legible, and in multi&#8209;reservoir runs with <b>3 or more reservoirs</b> it expands to the full panel width.</li>
+        <li><b>Multi&#8209;reservoir runs:</b> each bar is labelled <i>Reservoir: Parameter</i> and shows the impact on the <b>aggregate total</b> (all other reservoirs held at their deterministic mid&#8209;case).</li>
+        <li><b>Chart toolbar:</b> like all other charts, the tornado has the standard toolbar (zoom, pan, autoscale) including <b>camera</b> for a high&#8209;resolution PNG export.</li>
       </ul>
 
       <h3 id="advanced">11) Advanced Mode (Multi&#8209;Reservoir)</h3>
