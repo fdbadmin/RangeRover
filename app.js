@@ -858,6 +858,17 @@ function plotTornado(bars, unit) {
     paper_bgcolor: '#fff', plot_bgcolor: '#fff', showlegend: false,
     shapes: [{ type: 'line', x0: 0, x1: 0, y0: -0.5, y1: names.length - 0.5, yref: 'y', line: { color: '#374151', width: 2 } }]
   };
+  // Grow the container with the number of bars (multi-reservoir runs can have 40+ rows)
+  // so every row stays legible instead of being crushed into a fixed aspect ratio.
+  const gd = document.getElementById('tornado');
+  if (gd) {
+    const perBar = 28;                                   // px per bar row
+    const needed = layout.margin.t + layout.margin.b + names.length * perBar;
+    const h = Math.max(420, needed);
+    gd.style.aspectRatio = 'auto';
+    gd.style.height = h + 'px';
+    layout.height = h - 40;                              // inside container padding
+  }
   Plotly.newPlot('tornado', [traceLow, traceHigh], layout, { displayModeBar: true, responsive: true, toImageButtonOptions: { format: 'png', filename: 'rangerover-tornado', width: 1600, height: 1000, scale: 3 } });
 }
 
